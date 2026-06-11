@@ -2,26 +2,24 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Éditeur & Export PDF</title>
+  <title>Editeur de Document PDF</title>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      background: #e5e7eb !important; /* Fond gris pour faire ressortir la page A4 */
+      background: #e5e7eb !important;
       color: #1a1d27 !important;
       font-family: 'Segoe UI', system-ui, sans-serif;
       font-size: 13px; line-height: 1.5;
       height: 100vh;
-      overflow: hidden;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
-    /* =========================================================
-       BARRE D'OUTILS (FIXE EN HAUT)
-       ========================================================= */
     #toolbar {
       background: #fff;
       border-bottom: 1px solid #d1d5db;
@@ -29,55 +27,50 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
       z-index: 10;
       flex-shrink: 0;
     }
     
-    .status-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .badge {
-      background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;
-      padding: 4px 10px; border-radius: 20px; font-weight: 600; font-size: 12px;
-    }
-    
-    .actions {
+    .toolbar-left, .toolbar-right {
       display: flex;
       align-items: center;
       gap: 15px;
     }
-    
+
     .field-group {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      gap: 4px;
     }
-    .field-group label { font-weight: 600; font-size: 12px; color: #4b5563; }
-    .field-group input {
-      padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px;
-      font-size: 13px; width: 250px; outline: none;
+    .field-group label { font-weight: 600; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+    
+    select, input[type="text"] {
+      padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px;
+      font-size: 13px; background: #f9fafb; color: #111827; outline: none;
+      min-width: 200px;
     }
-    .field-group input:focus { border-color: #4f5de8; box-shadow: 0 0 0 3px rgba(79,93,232,.1); }
+    select:focus, input[type="text"]:focus { border-color: #4f5de8; background: #fff; box-shadow: 0 0 0 3px rgba(79,93,232,.1); }
 
     button {
-      background: #4f5de8; color: white; border: none;
-      padding: 9px 18px; border-radius: 6px; font-size: 13px; font-weight: 600;
-      cursor: pointer; display: flex; align-items: center; gap: 6px;
-      transition: background 0.2s;
+      background: linear-gradient(135deg,#4f5de8,#6b78f0); color: white; border: none;
+      padding: 9px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; gap: 8px;
+      box-shadow: 0 2px 6px rgba(79,93,232,.3); transition: opacity 0.2s;
     }
-    button:hover:not(:disabled) { background: #3f4ac0; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    button:hover:not(:disabled) { opacity: 0.9; }
+    button:disabled { background: #9ca3af; box-shadow: none; cursor: not-allowed; }
 
-    /* =========================================================
-       ZONE DE LA PAGE A4 ÉDITABLE
-       ========================================================= */
-    #scroll-area {
+    #status-badge {
+      background: #fffbeb; color: #b45309; border: 1px solid #fde68a;
+      padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    }
+    #status-badge.ok { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+
+    #editor-wrapper {
       flex: 1;
       overflow-y: auto;
-      padding: 30px 0;
+      padding: 30px 20px;
       display: flex;
       justify-content: center;
     }
@@ -86,21 +79,29 @@
       background: white;
       width: 210mm;
       min-height: 297mm;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.15);
       border-radius: 2px;
-      outline: none; /* Enlève la bordure bleue quand on clique dedans */
+      outline: none;
       position: relative;
     }
 
-    /* Message si aucune ligne n'est sélectionnée */
     #empty-state {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       color: #9ca3af; font-size: 15px; font-weight: 500; text-align: center;
     }
 
-    /* =========================================================
-       STYLES EXACTS DU RENDU GRIST / MARIANNE
-       ========================================================= */
+    .page-break-marker {
+      border-top: 2px dashed #cbd5e1 !important;
+      margin: 30px 0 !important;
+      text-align: center;
+      position: relative;
+    }
+    .page-break-marker::after {
+      content: "Saut de page";
+      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+      background: #e5e7eb; padding: 0 10px; color: #64748b; font-size: 11px; font-weight: bold;
+    }
+
     .editor-preview {
       font-family: 'Marianne', Arial, sans-serif;
       font-size: 14px; 
@@ -112,65 +113,80 @@
     .editor-preview code { background-color:#dfe9ff; padding:0 4px; border-radius:4px; color:black; }
     .editor-preview blockquote { border-left:4px solid #ddd; margin:0; padding:0 1rem; color:#666; }
     .editor-preview pre { background-color:#eef3ff; padding:8px; border-radius:4px; }
+    .editor-preview pre code { background-color:unset; padding:unset; border-radius:unset; }
     .editor-preview hr { margin-top:2rem; margin-bottom:2rem; border:none; border-top:1px solid #ddd; }
     .editor-preview table { margin:2rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; border-collapse:collapse; width:100%; }
     .editor-preview table th,
     .editor-preview table td { border:1px solid lightgrey; padding:0.5rem 1rem; border-right:none; border-bottom:none; color:black; }
+    .editor-preview table th:empty,
+    .editor-preview table td:empty { height:0px; padding:0px; border-top:none; }
     .editor-preview img { max-width:100%; height:auto; }
     .editor-preview p   { margin:0.5em 0; }
+    .editor-preview h1  { font-size:2em;    margin:0.67em 0; font-weight:bold; }
+    .editor-preview h2  { font-size:1.5em;  margin:0.75em 0; font-weight:bold; }
+    .editor-preview h3  { font-size:1.17em; margin:0.83em 0; font-weight:bold; }
+    .editor-preview ul,
+    .editor-preview ol  { margin:0.5em 0 0.5em 2em; }
+    .editor-preview li  { margin:0.25em 0; }
     .editor-preview strong { font-weight:bold; }
     .editor-preview em     { font-style:italic; }
-    
-    /* Correction du soulignement */
-    .editor-preview u { 
-      text-decoration: none; 
-      border-bottom: 1.5px solid currentColor; 
-      padding-bottom: 3px; 
-    }
+    .editor-preview u { text-decoration: none; border-bottom: 1.5px solid currentColor; padding-bottom: 3px; }
 
+    #render-zone {
+      position: fixed; top: 0; left: -9999px;
+      width: 794px; background: white;
+      pointer-events: none; z-index: -1;
+    }
   </style>
 </head>
 <body>
 
-  <div id="toolbar">
-    <div class="status-info">
-      <div class="badge" id="status-badge">⏳ Attente de Grist...</div>
-      <span style="font-size: 12px; color: #6b7280;">Le document est modifiable, cliquez dessus pour taper du texte.</span>
+<div id="toolbar">
+  <div class="toolbar-left">
+    <div class="field-group">
+      <label>Modele de document</label>
+      <select id="modelSelect">
+        <option value="">Chargement...</option>
+      </select>
     </div>
-    
-    <div class="actions">
-      <div class="field-group">
-        <label>Nom du PDF :</label>
-        <input type="text" id="namePattern" value="Document_{Nom}">
-      </div>
-      <button id="downloadBtn" disabled>
-        <span>📥</span> Télécharger PDF
-      </button>
-    </div>
+    <div id="status-badge">Attente de Grist...</div>
   </div>
+  
+  <div class="toolbar-right">
+    <div class="field-group">
+      <label>Nom du fichier ({Variables})</label>
+      <input type="text" id="namePattern" value="{Nom_fichier}">
+    </div>
+    <button id="downloadBtn" disabled>
+      Telecharger PDF
+    </button>
+  </div>
+</div>
 
-  <div id="scroll-area">
-    <div id="a4-page" class="editor-preview" contenteditable="true" spellcheck="false">
-      <div id="empty-state">Cliquez sur une ligne dans Grist pour afficher le document ici.</div>
-    </div>
+<div id="editor-wrapper">
+  <div id="a4-page" class="editor-preview" contenteditable="true" spellcheck="false">
+    <div id="empty-state">Cliquez sur une ligne dans Grist pour charger le document ici...</div>
   </div>
+</div>
+
+<div id="render-zone"></div>
 
 <script>
 (function () {
   'use strict';
 
   const $ = id => document.getElementById(id);
+  const rz = $('render-zone');
   const a4Page = $('a4-page');
-  const downloadBtn = $('downloadBtn');
-  
-  let allDataRows = [];
-  let htmlColKey = null;
-  let currentRowId = null;
-  let tableId = null;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  /* ════════════════════════════════════════════════
-     1. INITIALISATION GRIST
-  ════════════════════════════════════════════════ */
+  let mappedRecords = [];
+  let allTableRows  = [];
+  let htmlColKey    = null;
+  let tableId       = null;
+  let currentRowId  = null;
+  let isGenerating  = false;
+
   grist.ready({
     requiredAccess: 'full',
     columns: [{ name:'col_html', title:'Colonne HTML', optional:false, type:'Text' }]
@@ -178,43 +194,135 @@
 
   grist.on('message', e => { if (e.tableId) tableId = e.tableId; });
 
-  // Écoute les modifications de la table entière (chargement initial ou refresh)
   grist.onRecords(async (records, mappings) => {
-    if (records.length === 0) return;
-    
-    htmlColKey = (mappings && mappings.col_html) 
-      ? mappings.col_html 
-      : Object.keys(records[0]).filter(k => k !== 'id')[0];
+    mappedRecords = records || [];
+    htmlColKey = (mappings && mappings.col_html)
+      ? mappings.col_html
+      : (records.length ? Object.keys(records[0]).filter(k => k !== 'id')[0] : null);
 
     await loadFullTable();
-    if (currentRowId) renderDocument();
+    if (currentRowId) loadDocumentInEditor(currentRowId);
   });
 
-  // ÉCOUTE LA LIGNE SÉLECTIONNÉE (Le curseur Grist)
   grist.onRecord((record) => {
-    if (record) {
+    if (record && record.id !== currentRowId) {
       currentRowId = record.id;
-      renderDocument();
+      loadDocumentInEditor(currentRowId);
     }
   });
 
-  /* ════════════════════════════════════════════════
-     2. CHARGEMENT ET RENDU
-  ════════════════════════════════════════════════ */
   async function loadFullTable() {
     try {
       const tbl = await grist.getTable();
-      const id = tbl._platform ? await tbl._platform.getTableId() : (await tbl.getTableId());
-      const raw = await grist.docApi.fetchTable(id);
-      
+      let id;
+      if (typeof tbl.getTableId === 'function') id = await tbl.getTableId();
+      else if (tbl._platform?.getTableId)       id = await tbl._platform.getTableId();
+      else { allTableRows = mappedRecords; return; }
+
+      if (!tableId) tableId = id;
+
+      const raw  = await grist.docApi.fetchTable(id);
       const cols = Object.keys(raw);
-      const n = raw.id.length;
-      allDataRows = Array.from({ length: n }, (_, i) => {
+      const n    = raw.id.length;
+      allTableRows = Array.from({ length: n }, (_, i) => {
         const r = {}; cols.forEach(c => { r[c] = raw[c][i]; }); return r;
       });
+
+      await loadModeles();
     } catch (e) {
-      console.warn('Erreur chargement table:', e);
+      allTableRows = mappedRecords;
     }
+  }
+
+  async function loadModeles() {
+    try {
+      const raw  = await grist.docApi.fetchTable('Modeles');
+      const n    = raw.id.length;
+      const sel  = $('modelSelect');
+      
+      const currentVal = sel.value;
+      sel.innerHTML = '<option value="">Choisir un modele</option>';
+
+      for (let i = 0; i < n; i++) {
+        const nom = raw['Nom_du_modele']?.[i] || raw['Nom']?.[i] || raw['nom']?.[i] || `Modele ${raw.id[i]}`;
+        const opt = document.createElement('option');
+        opt.value       = raw.id[i];
+        opt.textContent = nom;
+        sel.appendChild(opt);
+      }
+      
+      if (currentVal) sel.value = currentVal;
+    } catch (e) {
+      $('modelSelect').innerHTML = '<option value="">Table Modeles introuvable</option>';
+    }
+  }
+
+  $('modelSelect').addEventListener('change', async (e) => {
+    const modeleId = parseInt(e.target.value);
+    if (!modeleId || !currentRowId || !tableId) return;
+
+    $('status-badge').textContent = 'Calcul Grist...';
+    $('status-badge').className = '';
+    
+    try {
+      await grist.docApi.applyUserActions([['UpdateRecord', tableId, currentRowId, { Modele: modeleId }]]);
+      
+      const maxWait = 10000;
+      const pollInterval = 500;
+      const startWait = Date.now();
+      
+      while (Date.now() - startWait < maxWait) {
+        await sleep(pollInterval);
+        const raw = await grist.docApi.fetchTable(tableId);
+        const cols = Object.keys(raw);
+        const idx = raw.id.indexOf(currentRowId);
+        
+        if (idx !== -1 && raw['Modele'][idx] === modeleId) {
+          const newHtml = raw[htmlColKey][idx];
+          if (newHtml && newHtml.trim()) {
+            const row = {}; cols.forEach(c => { row[c] = raw[c][idx]; });
+            injectHtmlIntoEditor(newHtml, row);
+            
+            const cacheIdx = allTableRows.findIndex(r => r.id === currentRowId);
+            if (cacheIdx !== -1) allTableRows[cacheIdx] = row;
+            
+            break;
+          }
+        }
+      }
+    } catch (err) {
+    }
+  });
+
+  async function loadDocumentInEditor(id) {
+    if (!htmlColKey || allTableRows.length === 0) return;
+    const row = allTableRows.find(r => r.id === id);
+    if (!row) return;
+
+    if (row['Modele']) {
+      $('modelSelect').value = row['Modele'];
+    } else {
+      $('modelSelect').value = "";
+    }
+
+    const html = row[htmlColKey];
+    if (html && html.trim()) {
+      injectHtmlIntoEditor(html, row);
+    } else {
+      a4Page.innerHTML = `<div id="empty-state">Modele HTML vide pour la ligne ${id}. Sélectionnez un modele.</div>`;
+      $('downloadBtn').disabled = true;
+      $('status-badge').textContent = `Ligne ${id} : Vide`;
+      $('status-badge').className = '';
+    }
+  }
+
+  async function injectHtmlIntoEditor(html, row) {
+    a4Page.innerHTML = html;
+    $('downloadBtn').disabled = false;
+    $('status-badge').textContent = `Document charge (Ligne ${row.id})`;
+    $('status-badge').className = 'ok';
+
+    await resolveImages(a4Page);
   }
 
   function resolveVar(row, key) {
@@ -225,40 +333,19 @@
       const [colRef, colProp] = key.split('.');
       const cand = Object.keys(row).find(k => k === colProp || k.endsWith('_' + colProp) || k === colRef + '_' + colProp);
       if (cand) return String(row[cand] ?? '').trim();
+      if (colRef in row) return String(row[colRef] ?? '').trim();
     }
     return '';
   }
 
-  async function renderDocument() {
-    if (!currentRowId || allDataRows.length === 0 || !htmlColKey) return;
-
-    const row = allDataRows.find(r => r.id === currentRowId);
-    if (!row) return;
-
-    // Mise à jour du statut
-    $('status-badge').textContent = `✅ Ligne sélectionnée : ID ${row.id}`;
-    $('status-badge').style.background = '#ecfdf5';
-    $('status-badge').style.color = '#065f46';
-    $('status-badge').style.borderColor = '#6ee7b7';
-    downloadBtn.disabled = false;
-
-    // Remplacement du nom de fichier dans l'input
+  function getFileName() {
+    const row = allTableRows.find(r => r.id === currentRowId);
+    if (!row) return "Document.pdf";
     const pat = $('namePattern').value.trim() || `Document_{id}`;
-    let fileName = pat.replace(/\{([^}]+)\}/g, (m, k) => resolveVar(row, k.trim()));
-    fileName = fileName.replace(/[<>:"/\\|?*]/g, '_').trim();
-    $('namePattern').dataset.filename = fileName; // On sauvegarde le nom généré
-
-    // Injection du HTML dans la page A4 (Éditable)
-    let htmlContent = row[htmlColKey] || "<p style='color:red;'>Aucun modèle HTML trouvé pour cette ligne.</p>";
-    a4Page.innerHTML = htmlContent;
-
-    // Gérer les images (CORS)
-    await resolveImages(a4Page);
+    let name = pat.replace(/\{([^}]+)\}/g, (m, k) => resolveVar(row, k.trim()));
+    return name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim() + ".pdf";
   }
 
-  /* ════════════════════════════════════════════════
-     3. GESTION DES IMAGES (CORS)
-  ════════════════════════════════════════════════ */
   async function resolveImages(container) {
     const imgs = Array.from(container.querySelectorAll('img'));
     if (!imgs.length) return;
@@ -292,40 +379,214 @@
     }));
   }
 
-  /* ════════════════════════════════════════════════
-     4. GÉNÉRATION DU PDF (Au clic)
-  ════════════════════════════════════════════════ */
-  downloadBtn.addEventListener('click', async () => {
-    downloadBtn.disabled = true;
-    downloadBtn.innerHTML = "⏳ Création PDF...";
+  function waitImages(el, ms = 4000) {
+    const imgs = Array.from(el.querySelectorAll('img'));
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(imgs.map(img => new Promise(res => {
+      if (img.complete && img.naturalWidth > 0) return res();
+      img.onload = img.onerror = res;
+      setTimeout(res, ms);
+    })));
+  }
 
-    const originalFilename = $('namePattern').dataset.filename || 'Document';
-    // Si l'utilisateur a modifié le nom dans l'input, on le prend
-    let finalFilename = $('namePattern').value.replace(/\{([^}]+)\}/g, (m, k) => {
-      const row = allDataRows.find(r => r.id === currentRowId);
-      return row ? resolveVar(row, k.trim()) : m;
-    }) + '.pdf';
+  function paginateHtml(html, measureZone) {
+    const PAGE_H = 1123;
+    const PAD    = 38;
+    const MAX_H  = PAGE_H - PAD * 2;
+
+    const m = document.createElement('div');
+    m.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;width:100%;pointer-events:none;';
+    measureZone.appendChild(m);
+
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    let children = Array.from(tmp.childNodes).filter(n =>
+      n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())
+    );
+
+    if (children.length === 1 && children[0].nodeType === 1 && children[0].nodeName === 'DIV') {
+      const inner = Array.from(children[0].childNodes).filter(n =>
+        n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())
+      );
+      if (inner.length > 1) {
+        children = inner;
+      }
+    }
+
+    const pages = [];
+    let curHtml = '';
+    let curH    = 0;
+
+    for (const child of children) {
+      const childHtml = child.outerHTML || child.textContent || '';
+      if (!childHtml.trim()) continue;
+
+      let forceBreakBefore = false;
+      let forceBreakAfter = false;
+
+      if (child.nodeType === 1) {
+        const style = child.getAttribute('style') || '';
+        if (style.includes('page-break-before: always') || style.includes('page-break-before:always') || child.classList.contains('page-break-marker')) {
+          forceBreakBefore = true;
+        }
+        if (style.includes('page-break-after: always') || style.includes('page-break-after:always')) {
+          forceBreakAfter = true;
+        }
+      }
+
+      const cleanChildHtml = childHtml.replace(/page-break-marker/g, '');
+
+      if (forceBreakBefore && curHtml.trim()) {
+        pages.push(curHtml);
+        curHtml = '';
+        curH = 0;
+      }
+
+      m.innerHTML = cleanChildHtml;
+      const cH = m.offsetHeight;
+
+      if (curH + cH <= MAX_H) {
+        curHtml += cleanChildHtml;
+        curH    += cH;
+      } else {
+        if (child.nodeName === 'TABLE') {
+          const chunks = splitTable(child, m, MAX_H, curH);
+          if (chunks.length > 0) {
+            curHtml += chunks[0];
+            pages.push(curHtml);
+            for (let t = 1; t < chunks.length - 1; t++) pages.push(chunks[t]);
+            if (chunks.length > 1) {
+              curHtml = chunks[chunks.length - 1];
+              m.innerHTML = curHtml;
+              curH = m.offsetHeight;
+            } else {
+              curHtml = ''; curH = 0;
+            }
+          }
+        } else {
+          if (curHtml.trim()) pages.push(curHtml);
+          curHtml = cleanChildHtml;
+          curH    = cH;
+        }
+      }
+
+      if (forceBreakAfter && curHtml.trim()) {
+        pages.push(curHtml);
+        curHtml = '';
+        curH = 0;
+      }
+    }
+
+    if (curHtml.trim()) pages.push(curHtml);
+    measureZone.removeChild(m);
+    return pages.length > 0 ? pages : [html];
+  }
+
+  function splitTable(table, measurer, maxH, startH) {
+    const thead     = table.querySelector('thead');
+    const theadHtml = thead ? thead.outerHTML : '';
+    let theadH = 0;
+    
+    if (thead) {
+      measurer.innerHTML = '<table style="border-collapse:collapse;width:100%">' + theadHtml + '</table>';
+      theadH = measurer.offsetHeight;
+    }
+
+    const allRows  = Array.from(table.querySelectorAll('tr'));
+    const bodyRows = allRows.filter(r => !thead || !thead.contains(r));
+
+    const attrs = Array.from(table.attributes)
+      .map(a => a.name === 'style'
+        ? 'style="border-collapse:collapse;width:100%;' + a.value + '"'
+        : a.name + '="' + a.value + '"')
+      .join(' ');
+    const tOpen = '<table ' + (attrs || 'style="border-collapse:collapse;width:100%"') + '>';
+
+    const pages = [];
+    let curRows = '';
+    let curH    = startH + theadH;
+
+    for (const row of bodyRows) {
+      const rowHtml = row.outerHTML;
+      measurer.innerHTML = '<table style="border-collapse:collapse;width:100%"><tbody>' + rowHtml + '</tbody></table>';
+      const rH = measurer.offsetHeight;
+
+      if (curH + rH > maxH && curRows.length > 0) {
+        pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
+        curRows = '';
+        curH    = theadH;
+      }
+      curRows += rowHtml;
+      curH    += rH;
+    }
+
+    if (curRows.length > 0)
+      pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
+
+    return pages.length > 0 ? pages : [table.outerHTML];
+  }
+
+  $('downloadBtn').addEventListener('click', async () => {
+    if (isGenerating || !currentRowId) return;
+    isGenerating = true;
+    
+    const btn = $('downloadBtn');
+    btn.disabled = true;
+    btn.innerHTML = 'Creation en cours...';
 
     try {
-      // Configuration de html2pdf
-      const opt = {
-        margin:       0, // Les marges sont gérées par le CSS padding de .editor-preview
-        filename:     finalFilename,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['css', 'legacy'] }
-      };
+      const editedHtml = a4Page.innerHTML;
+      const fileName = getFileName();
 
-      // On cible directement la div #a4-page qui contient les modifications manuelles de l'utilisateur
-      await html2pdf().set(opt).from(a4Page).save();
+      const PAGE_W = 794, PAGE_H = 1123, MM_W = 210, MM_H = 297;
+      rz.style.width    = PAGE_W + 'px';
+      rz.style.height   = 'auto';
+      rz.style.overflow = 'visible';
+      rz.innerHTML = `<div class="editor-preview">${editedHtml}</div>`;
+      
+      const ep = rz.firstElementChild;
 
-    } catch (e) {
-      console.error("Erreur génération PDF:", e);
-      alert("Erreur lors de la génération du PDF.");
+      await waitImages(ep, 2000);
+      await sleep(100);
+
+      const pages = paginateHtml(ep.innerHTML, ep);
+
+      rz.style.height   = PAGE_H + 'px';
+      rz.style.overflow = 'hidden';
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+      for (let p = 0; p < pages.length; p++) {
+        if (p > 0) pdf.addPage();
+        ep.innerHTML = pages[p];
+        await sleep(80);
+
+        const canvas = await html2canvas(rz, {
+          scale:           2,
+          useCORS:         true,
+          allowTaint:      true,
+          logging:         false,
+          scrollX:         0,
+          scrollY:         0,
+          windowWidth:     PAGE_W,
+          width:           PAGE_W,
+          height:          PAGE_H,
+          backgroundColor: '#ffffff'
+        });
+
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, MM_W, MM_H, '', 'FAST');
+        canvas.width = canvas.height = 1; 
+      }
+
+      pdf.save(fileName);
+
+    } catch (err) {
     } finally {
-      downloadBtn.disabled = false;
-      downloadBtn.innerHTML = "<span>📥</span> Télécharger PDF";
+      rz.innerHTML = '';
+      btn.disabled = false;
+      btn.innerHTML = 'Telecharger PDF';
+      isGenerating = false;
     }
   });
 
