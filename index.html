@@ -2,11 +2,13 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Editeur de Document PDF</title>
+  <title>Export PDF & Editeur</title>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://unpkg.com/html-docx-js/dist/html-docx.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -20,146 +22,154 @@
       overflow: hidden;
     }
 
-    #toolbar {
-      background: #fff;
-      border-bottom: 1px solid #d1d5db;
-      padding: 12px 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-      z-index: 10;
-      flex-shrink: 0;
-    }
-    
-    .toolbar-left, .toolbar-right {
-      display: flex;
-      align-items: center;
-      gap: 15px;
+    #app-container { flex-shrink: 0; padding: 15px; display: flex; justify-content: center; }
+    .card {
+      background: #fff !important;
+      border: 1px solid #e2e5ed; border-radius: 8px;
+      padding: 18px 20px; box-shadow: 0 2px 10px rgba(0,0,0,.07);
+      width: 100%; max-width: 900px;
     }
 
-    .field-group {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .field-group label { font-weight: 600; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
-    
-    select, input[type="text"] {
-      padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px;
-      font-size: 13px; background: #f9fafb; color: #111827; outline: none;
-      min-width: 200px;
-    }
-    select:focus, input[type="text"]:focus { border-color: #4f5de8; background: #fff; box-shadow: 0 0 0 3px rgba(79,93,232,.1); }
+    .hdr { display:flex; align-items:center; gap:10px; padding-bottom:13px; border-bottom:1px solid #e2e5ed; margin-bottom:15px; }
+    .hdr-t { font-size:14px; font-weight:700; }
 
-    button {
-      background: linear-gradient(135deg,#4f5de8,#6b78f0); color: white; border: none;
-      padding: 9px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
-      cursor: pointer; display: flex; align-items: center; gap: 8px;
-      box-shadow: 0 2px 6px rgba(79,93,232,.3); transition: opacity 0.2s;
+    #col-status {
+      display:flex; align-items:center; gap:6px;
+      padding:7px 10px; border-radius:6px; font-size:12px; font-weight:600;
+      background:#fffbeb; color:#b45309 !important; border:1px solid #fde68a;
+      margin-bottom:14px;
     }
-    button:hover:not(:disabled) { opacity: 0.9; }
-    button:disabled { background: #9ca3af; box-shadow: none; cursor: not-allowed; }
+    #col-status.ready { background:#ecfdf5; color:#065f46 !important; border-color:#6ee7b7; }
+    #col-status .dot  { width:7px; height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
 
-    #status-badge {
-      background: #fffbeb; color: #b45309; border: 1px solid #fde68a;
-      padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
-    }
-    #status-badge.ok { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+    .sec { font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#6b7280 !important; margin-bottom:8px; }
+    .field { margin-bottom:10px; }
+    .field label { display:block; font-weight:600; font-size:12px; margin-bottom:4px; }
+    .field label span { font-weight:400; color:#6b7280 !important; }
 
-    #editor-wrapper {
-      flex: 1;
-      overflow-y: auto;
-      padding: 30px 20px;
-      display: flex;
-      justify-content: center;
-    }
-
-    #a4-page {
-      background: white;
-      width: 210mm;
-      min-height: 297mm;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-      border-radius: 2px;
+    input[type="text"], input[type="number"], select {
+      display:block; width:100%; padding:8px 10px;
+      border:1.5px solid #d1d5db; border-radius:6px;
+      font-size:13px; font-family:inherit;
+      background:#f9fafb !important; color:#111827 !important;
       outline: none;
-      position: relative;
     }
+    input:focus, select:focus { border-color:#4f5de8; box-shadow:0 0 0 3px rgba(79,93,232,.13); background:#fff !important; }
 
-    #empty-state {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      color: #9ca3af; font-size: 15px; font-weight: 500; text-align: center;
-    }
+    .grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 
-    .page-break-marker {
-      border-top: 2px dashed #cbd5e1 !important;
-      margin: 30px 0 !important;
-      text-align: center;
-      position: relative;
-    }
-    .page-break-marker::after {
-      content: "Saut de page";
-      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
-      background: #e5e7eb; padding: 0 10px; color: #64748b; font-size: 11px; font-weight: bold;
-    }
+    hr { border:none; border-top:1px solid #e5e7eb; margin:13px 0; }
 
-    .editor-preview {
-      font-family: 'Marianne', Arial, sans-serif;
-      font-size: 14px; 
-      line-height: 1.5; 
-      text-align: justify;
-      color: black; 
-      padding: 10mm 15mm; 
+    .btn-row { display:flex; gap:8px; margin-top:4px; }
+    button {
+      padding:11px 16px; border:none; border-radius:7px;
+      font-size:13px; font-weight:700; font-family:inherit;
+      cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px;
+      transition:opacity .2s; flex: 1;
     }
+    .btn-primary { background:linear-gradient(135deg,#4f5de8,#6b78f0); color:#fff !important; box-shadow:0 4px 14px rgba(79,93,232,.32); }
+    .btn-secondary { background:linear-gradient(135deg,#2563eb,#3b82f6); color:#fff !important; box-shadow:0 4px 14px rgba(37,99,235,.32); }
+    .btn-cancel { display:none; flex:0 0 auto; background:#fee2e2; color:#991b1b !important; border:1px solid #fca5a5; }
+    .btn-cancel.visible { display:flex; }
+    button:hover:not(:disabled) { opacity:.9; }
+    button:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
+
+    #prog-area { display:none; margin-top:13px; }
+    #prog-area.on { display:block; }
+    .pbar-wrap { height:5px; background:#e5e7eb; border-radius:99px; overflow:hidden; margin-bottom:6px; }
+    .pbar-fill  { height:100%; background:linear-gradient(90deg,#4f5de8,#7c86f7); border-radius:99px; transition:width .3s; width:0%; }
+    .pbar-info  { display:flex; justify-content:space-between; font-size:11.5px; }
+
+    #result { display:none; padding:9px 12px; border-radius:6px; font-size:12.5px; font-weight:600; margin-top:11px; text-align:center; }
+    #result.ok   { display:block; background:#ecfdf5; color:#065f46 !important; border:1px solid #6ee7b7; }
+    #result.err  { display:block; background:#fef2f2; color:#991b1b !important; border:1px solid #fca5a5; }
+    #result.warn { display:block; background:#fffbeb; color:#b45309 !important; border:1px solid #fde68a; }
+
+    #editor-wrapper { flex: 1; overflow-y: auto; padding: 20px; display: flex; justify-content: center; }
+    #a4-page {
+      background: white; width: 210mm; min-height: 297mm;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.15); border-radius: 2px;
+      outline: none; position: relative;
+    }
+    #empty-state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #9ca3af; font-size: 15px; font-weight: 500; text-align: center; }
+
+    .page-break-marker { border-top: 2px dashed #cbd5e1 !important; margin: 30px 0 !important; text-align: center; position: relative; }
+    .page-break-marker::after { content: "Saut de page"; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #e5e7eb; padding: 0 10px; color: #64748b; font-size: 11px; font-weight: bold; }
+
+    .editor-preview { font-family: 'Marianne', Arial, sans-serif; font-size: 14px; line-height: 1.5; text-align: justify; color: black; padding: 10mm 15mm; }
     .editor-preview code { background-color:#dfe9ff; padding:0 4px; border-radius:4px; color:black; }
     .editor-preview blockquote { border-left:4px solid #ddd; margin:0; padding:0 1rem; color:#666; }
     .editor-preview pre { background-color:#eef3ff; padding:8px; border-radius:4px; }
     .editor-preview pre code { background-color:unset; padding:unset; border-radius:unset; }
     .editor-preview hr { margin-top:2rem; margin-bottom:2rem; border:none; border-top:1px solid #ddd; }
     .editor-preview table { margin:2rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; border-collapse:collapse; width:100%; }
-    .editor-preview table th,
-    .editor-preview table td { border:1px solid lightgrey; padding:0.5rem 1rem; border-right:none; border-bottom:none; color:black; }
-    .editor-preview table th:empty,
-    .editor-preview table td:empty { height:0px; padding:0px; border-top:none; }
+    .editor-preview table th, .editor-preview table td { border:1px solid lightgrey; padding:0.5rem 1rem; border-right:none; border-bottom:none; color:black; }
+    .editor-preview table th:empty, .editor-preview table td:empty { height:0px; padding:0px; border-top:none; }
     .editor-preview img { max-width:100%; height:auto; }
     .editor-preview p   { margin:0.5em 0; }
-    .editor-preview h1  { font-size:2em;    margin:0.67em 0; font-weight:bold; }
-    .editor-preview h2  { font-size:1.5em;  margin:0.75em 0; font-weight:bold; }
+    .editor-preview h1  { font-size:2em; margin:0.67em 0; font-weight:bold; }
+    .editor-preview h2  { font-size:1.5em; margin:0.75em 0; font-weight:bold; }
     .editor-preview h3  { font-size:1.17em; margin:0.83em 0; font-weight:bold; }
-    .editor-preview ul,
-    .editor-preview ol  { margin:0.5em 0 0.5em 2em; }
+    .editor-preview ul, .editor-preview ol  { margin:0.5em 0 0.5em 2em; }
     .editor-preview li  { margin:0.25em 0; }
     .editor-preview strong { font-weight:bold; }
     .editor-preview em     { font-style:italic; }
     .editor-preview u { text-decoration: none; border-bottom: 1.5px solid currentColor; padding-bottom: 3px; }
 
-    #render-zone {
-      position: fixed; top: 0; left: -9999px;
-      width: 794px; background: white;
-      pointer-events: none; z-index: -1;
-    }
+    #render-zone { position: fixed; top: 0; left: -9999px; width: 794px; background: white; pointer-events: none; z-index: -1; }
   </style>
 </head>
 <body>
 
-<div id="toolbar">
-  <div class="toolbar-left">
-    <div class="field-group">
-      <label>Modele de document</label>
-      <select id="modelSelect">
-        <option value="">Chargement...</option>
-      </select>
+<div id="app-container">
+  <div class="card">
+    <div class="hdr">
+      <div class="hdr-t">Export & Editeur de Documents</div>
     </div>
-    <div id="status-badge">Attente de Grist...</div>
-  </div>
-  
-  <div class="toolbar-right">
-    <div class="field-group">
-      <label>Nom du fichier ({Variables})</label>
-      <input type="text" id="namePattern" value="{Nom_fichier}">
+
+    <div id="col-status" class="waiting">
+      <span class="dot"></span>
+      <span id="col-txt">En attente du mapping de la colonne HTML</span>
     </div>
-    <button id="downloadBtn" disabled>
-      Telecharger PDF
-    </button>
+
+    <div class="grid-layout">
+      <div>
+        <div class="sec">1. Generation en Lot (ZIP)</div>
+        <div class="field">
+          <label>Modele de document (Applique au lot)</label>
+          <select id="modelSelect"><option value="">Chargement...</option></select>
+        </div>
+        <div class="row2">
+          <div class="field"><label>De la ligne N°</label><input type="number" id="startRow" value="1" min="1"></div>
+          <div class="field"><label>A la ligne N°</label><input type="number" id="endRow" value="10" min="1"></div>
+        </div>
+        <div class="btn-row">
+          <button id="genBtn" class="btn-primary" disabled>Generer le ZIP</button>
+          <button id="cancelBtn" class="btn-cancel" title="Annuler">Annuler</button>
+        </div>
+        <div id="prog-area">
+          <div class="pbar-wrap"><div class="pbar-fill" id="pbar"></div></div>
+          <div class="pbar-info"><span id="prog-lbl">Initialisation...</span><span id="prog-cnt">0 / 0</span></div>
+        </div>
+        <div id="result"></div>
+      </div>
+
+      <div>
+        <div class="sec">2. Edition Individuelle (Ligne selectionnee)</div>
+        <div class="field">
+          <label>Nom du fichier sortant</label>
+          <input type="text" id="namePattern" value="{Nom_fichier}">
+        </div>
+        <div style="font-size: 11px; color: #6b7280; margin-bottom: 10px;">
+          Le document s'affiche ci-dessous. Vous pouvez le modifier manuellement avant le telechargement.
+        </div>
+        <div class="btn-row">
+          <button id="downloadPdfBtn" class="btn-primary" disabled>Telecharger PDF</button>
+          <button id="downloadDocxBtn" class="btn-secondary" disabled>Telecharger DOCX</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -185,7 +195,8 @@
   let htmlColKey    = null;
   let tableId       = null;
   let currentRowId  = null;
-  let isGenerating  = false;
+  let cancelled     = false;
+  let busy          = false;
 
   grist.ready({
     requiredAccess: 'full',
@@ -200,7 +211,9 @@
       ? mappings.col_html
       : (records.length ? Object.keys(records[0]).filter(k => k !== 'id')[0] : null);
 
-    await loadFullTable();
+    updateStatus();
+    if (!busy) $('endRow').value = mappedRecords.length || 10;
+    if (!busy) await loadFullTable();
     if (currentRowId) loadDocumentInEditor(currentRowId);
   });
 
@@ -239,10 +252,9 @@
       const raw  = await grist.docApi.fetchTable('Modeles');
       const n    = raw.id.length;
       const sel  = $('modelSelect');
-      
       const currentVal = sel.value;
+      
       sel.innerHTML = '<option value="">Choisir un modele</option>';
-
       for (let i = 0; i < n; i++) {
         const nom = raw['Nom_du_modele']?.[i] || raw['Nom']?.[i] || raw['nom']?.[i] || `Modele ${raw.id[i]}`;
         const opt = document.createElement('option');
@@ -250,79 +262,46 @@
         opt.textContent = nom;
         sel.appendChild(opt);
       }
-      
       if (currentVal) sel.value = currentVal;
     } catch (e) {
       $('modelSelect').innerHTML = '<option value="">Table Modeles introuvable</option>';
     }
   }
 
-  $('modelSelect').addEventListener('change', async (e) => {
-    const modeleId = parseInt(e.target.value);
-    if (!modeleId || !currentRowId || !tableId) return;
-
-    $('status-badge').textContent = 'Calcul Grist...';
-    $('status-badge').className = '';
-    
-    try {
-      await grist.docApi.applyUserActions([['UpdateRecord', tableId, currentRowId, { Modele: modeleId }]]);
-      
-      const maxWait = 10000;
-      const pollInterval = 500;
-      const startWait = Date.now();
-      
-      while (Date.now() - startWait < maxWait) {
-        await sleep(pollInterval);
-        const raw = await grist.docApi.fetchTable(tableId);
-        const cols = Object.keys(raw);
-        const idx = raw.id.indexOf(currentRowId);
-        
-        if (idx !== -1 && raw['Modele'][idx] === modeleId) {
-          const newHtml = raw[htmlColKey][idx];
-          if (newHtml && newHtml.trim()) {
-            const row = {}; cols.forEach(c => { row[c] = raw[c][idx]; });
-            injectHtmlIntoEditor(newHtml, row);
-            
-            const cacheIdx = allTableRows.findIndex(r => r.id === currentRowId);
-            if (cacheIdx !== -1) allTableRows[cacheIdx] = row;
-            
-            break;
-          }
-        }
-      }
-    } catch (err) {
+  function updateStatus() {
+    const el = $('col-status');
+    if (htmlColKey && mappedRecords.length > 0) {
+      el.className = 'ready';
+      $('col-txt').textContent = `Colonne HTML mappee`;
+      $('genBtn').disabled = false;
+    } else {
+      el.className = 'waiting';
+      $('col-txt').textContent = 'En attente du mapping de la colonne HTML';
+      $('genBtn').disabled = true;
     }
-  });
+  }
+
+  async function setModeleForRows(rowIds, modeleId) {
+    const actions = rowIds.map(id => ['UpdateRecord', tableId, id, { Modele: modeleId }]);
+    await grist.docApi.applyUserActions(actions);
+  }
 
   async function loadDocumentInEditor(id) {
     if (!htmlColKey || allTableRows.length === 0) return;
     const row = allTableRows.find(r => r.id === id);
     if (!row) return;
 
-    if (row['Modele']) {
-      $('modelSelect').value = row['Modele'];
-    } else {
-      $('modelSelect').value = "";
-    }
-
     const html = row[htmlColKey];
     if (html && html.trim()) {
-      injectHtmlIntoEditor(html, row);
+      a4Page.innerHTML = html;
+      $('downloadPdfBtn').disabled = false;
+      $('downloadDocxBtn').disabled = false;
+      await resolveImages(a4Page);
     } else {
-      a4Page.innerHTML = `<div id="empty-state">Modele HTML vide pour la ligne ${id}. Sélectionnez un modele.</div>`;
-      $('downloadBtn').disabled = true;
-      $('status-badge').textContent = `Ligne ${id} : Vide`;
-      $('status-badge').className = '';
+      a4Page.innerHTML = `<div id="empty-state">Modele HTML vide pour la ligne ${id}.</div>`;
+      $('downloadPdfBtn').disabled = true;
+      $('downloadDocxBtn').disabled = true;
     }
-  }
-
-  async function injectHtmlIntoEditor(html, row) {
-    a4Page.innerHTML = html;
-    $('downloadBtn').disabled = false;
-    $('status-badge').textContent = `Document charge (Ligne ${row.id})`;
-    $('status-badge').className = 'ok';
-
-    await resolveImages(a4Page);
   }
 
   function resolveVar(row, key) {
@@ -338,10 +317,16 @@
     return '';
   }
 
-  function getFileName() {
+  function getFileName(ext) {
     const row = allTableRows.find(r => r.id === currentRowId);
-    if (!row) return "Document.pdf";
+    if (!row) return "Document." + ext;
     const pat = $('namePattern').value.trim() || `Document_{id}`;
+    let name = pat.replace(/\{([^}]+)\}/g, (m, k) => resolveVar(row, k.trim()));
+    return name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim() + "." + ext;
+  }
+
+  function getBatchFileName(row, idx) {
+    const pat = $('namePattern').value.trim() || `Document_${idx + 1}`;
     let name = pat.replace(/\{([^}]+)\}/g, (m, k) => resolveVar(row, k.trim()));
     return name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim() + ".pdf";
   }
@@ -390,40 +375,28 @@
   }
 
   function paginateHtml(html, measureZone) {
-    const PAGE_H = 1123;
-    const PAD    = 38;
-    const MAX_H  = PAGE_H - PAD * 2;
-
+    const PAGE_H = 1123, PAD = 38, MAX_H = PAGE_H - PAD * 2;
     const m = document.createElement('div');
     m.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;width:100%;pointer-events:none;';
     measureZone.appendChild(m);
 
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
-    let children = Array.from(tmp.childNodes).filter(n =>
-      n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())
-    );
+    let children = Array.from(tmp.childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
 
     if (children.length === 1 && children[0].nodeType === 1 && children[0].nodeName === 'DIV') {
-      const inner = Array.from(children[0].childNodes).filter(n =>
-        n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())
-      );
-      if (inner.length > 1) {
-        children = inner;
-      }
+      const inner = Array.from(children[0].childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
+      if (inner.length > 1) children = inner;
     }
 
     const pages = [];
-    let curHtml = '';
-    let curH    = 0;
+    let curHtml = '', curH = 0;
 
     for (const child of children) {
       const childHtml = child.outerHTML || child.textContent || '';
       if (!childHtml.trim()) continue;
 
-      let forceBreakBefore = false;
-      let forceBreakAfter = false;
-
+      let forceBreakBefore = false, forceBreakAfter = false;
       if (child.nodeType === 1) {
         const style = child.getAttribute('style') || '';
         if (style.includes('page-break-before: always') || style.includes('page-break-before:always') || child.classList.contains('page-break-marker')) {
@@ -436,158 +409,276 @@
 
       const cleanChildHtml = childHtml.replace(/page-break-marker/g, '');
 
-      if (forceBreakBefore && curHtml.trim()) {
-        pages.push(curHtml);
-        curHtml = '';
-        curH = 0;
-      }
+      if (forceBreakBefore && curHtml.trim()) { pages.push(curHtml); curHtml = ''; curH = 0; }
 
       m.innerHTML = cleanChildHtml;
       const cH = m.offsetHeight;
 
       if (curH + cH <= MAX_H) {
-        curHtml += cleanChildHtml;
-        curH    += cH;
+        curHtml += cleanChildHtml; curH += cH;
       } else {
         if (child.nodeName === 'TABLE') {
           const chunks = splitTable(child, m, MAX_H, curH);
           if (chunks.length > 0) {
-            curHtml += chunks[0];
-            pages.push(curHtml);
+            curHtml += chunks[0]; pages.push(curHtml);
             for (let t = 1; t < chunks.length - 1; t++) pages.push(chunks[t]);
-            if (chunks.length > 1) {
-              curHtml = chunks[chunks.length - 1];
-              m.innerHTML = curHtml;
-              curH = m.offsetHeight;
-            } else {
-              curHtml = ''; curH = 0;
-            }
+            if (chunks.length > 1) { curHtml = chunks[chunks.length - 1]; m.innerHTML = curHtml; curH = m.offsetHeight; } 
+            else { curHtml = ''; curH = 0; }
           }
         } else {
           if (curHtml.trim()) pages.push(curHtml);
-          curHtml = cleanChildHtml;
-          curH    = cH;
+          curHtml = cleanChildHtml; curH = cH;
         }
       }
-
-      if (forceBreakAfter && curHtml.trim()) {
-        pages.push(curHtml);
-        curHtml = '';
-        curH = 0;
-      }
+      if (forceBreakAfter && curHtml.trim()) { pages.push(curHtml); curHtml = ''; curH = 0; }
     }
-
     if (curHtml.trim()) pages.push(curHtml);
     measureZone.removeChild(m);
     return pages.length > 0 ? pages : [html];
   }
 
   function splitTable(table, measurer, maxH, startH) {
-    const thead     = table.querySelector('thead');
+    const thead = table.querySelector('thead');
     const theadHtml = thead ? thead.outerHTML : '';
     let theadH = 0;
-    
-    if (thead) {
-      measurer.innerHTML = '<table style="border-collapse:collapse;width:100%">' + theadHtml + '</table>';
-      theadH = measurer.offsetHeight;
-    }
-
-    const allRows  = Array.from(table.querySelectorAll('tr'));
+    if (thead) { measurer.innerHTML = '<table style="border-collapse:collapse;width:100%">' + theadHtml + '</table>'; theadH = measurer.offsetHeight; }
+    const allRows = Array.from(table.querySelectorAll('tr'));
     const bodyRows = allRows.filter(r => !thead || !thead.contains(r));
-
-    const attrs = Array.from(table.attributes)
-      .map(a => a.name === 'style'
-        ? 'style="border-collapse:collapse;width:100%;' + a.value + '"'
-        : a.name + '="' + a.value + '"')
-      .join(' ');
+    const attrs = Array.from(table.attributes).map(a => a.name === 'style' ? 'style="border-collapse:collapse;width:100%;' + a.value + '"' : a.name + '="' + a.value + '"').join(' ');
     const tOpen = '<table ' + (attrs || 'style="border-collapse:collapse;width:100%"') + '>';
-
-    const pages = [];
-    let curRows = '';
-    let curH    = startH + theadH;
-
+    const pages = []; let curRows = '', curH = startH + theadH;
     for (const row of bodyRows) {
       const rowHtml = row.outerHTML;
       measurer.innerHTML = '<table style="border-collapse:collapse;width:100%"><tbody>' + rowHtml + '</tbody></table>';
       const rH = measurer.offsetHeight;
-
-      if (curH + rH > maxH && curRows.length > 0) {
-        pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
-        curRows = '';
-        curH    = theadH;
-      }
-      curRows += rowHtml;
-      curH    += rH;
+      if (curH + rH > maxH && curRows.length > 0) { pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>'); curRows = ''; curH = theadH; }
+      curRows += rowHtml; curH += rH;
     }
-
-    if (curRows.length > 0)
-      pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
-
+    if (curRows.length > 0) pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
     return pages.length > 0 ? pages : [table.outerHTML];
   }
 
-  $('downloadBtn').addEventListener('click', async () => {
-    if (isGenerating || !currentRowId) return;
-    isGenerating = true;
-    
-    const btn = $('downloadBtn');
-    btn.disabled = true;
-    btn.innerHTML = 'Creation en cours...';
+  async function htmlToBlob(html) {
+    const { jsPDF } = window.jspdf;
+    const PAGE_W = 794, PAGE_H = 1123, MM_W = 210, MM_H = 297;
+    rz.style.width = PAGE_W + 'px'; rz.style.height = 'auto'; rz.style.overflow = 'visible';
+    rz.innerHTML = `<div class="editor-preview">${html}</div>`;
+    const ep = rz.firstElementChild;
 
+    await resolveImages(ep);
+    await waitImages(ep, 4000);
+    await sleep(300);
+
+    const pages = paginateHtml(ep.innerHTML, ep);
+    rz.style.height = PAGE_H + 'px'; rz.style.overflow = 'hidden';
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    for (let p = 0; p < pages.length; p++) {
+      if (p > 0) pdf.addPage();
+      ep.innerHTML = pages[p];
+      await sleep(80);
+      const canvas = await html2canvas(rz, { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: PAGE_W, width: PAGE_W, height: PAGE_H, backgroundColor: '#ffffff' });
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, MM_W, MM_H, '', 'FAST');
+      canvas.width = canvas.height = 1; 
+    }
+    rz.style.height = 'auto'; rz.style.overflow = 'visible'; rz.innerHTML = '';
+    return pdf.output('blob');
+  }
+
+  function setProgress(cur, tot, lbl) {
+    $('pbar').style.width = tot > 0 ? Math.round(cur/tot*100)+'%' : '0%';
+    $('prog-lbl').textContent = lbl;
+    $('prog-cnt').textContent = `${cur} / ${tot}`;
+  }
+
+  function showResult(cls, msg) {
+    const el = $('result');
+    el.className = cls; el.textContent = msg; el.style.display = 'block';
+  }
+
+  $('cancelBtn').addEventListener('click', () => {
+    if (!busy) return;
+    cancelled = true;
+    $('prog-lbl').textContent = 'Annulation…';
+  });
+
+  /* ════════════════════════════════════════════════
+     1. TÉLÉCHARGEMENTS INDIVIDUELS
+  ════════════════════════════════════════════════ */
+  $('downloadPdfBtn').addEventListener('click', async () => {
+    if (busy || !currentRowId) return;
+    busy = true; const btn = $('downloadPdfBtn'); btn.disabled = true; btn.innerHTML = 'Creation en cours...';
     try {
       const editedHtml = a4Page.innerHTML;
-      const fileName = getFileName();
-
+      const fileName = getFileName("pdf");
       const PAGE_W = 794, PAGE_H = 1123, MM_W = 210, MM_H = 297;
-      rz.style.width    = PAGE_W + 'px';
-      rz.style.height   = 'auto';
-      rz.style.overflow = 'visible';
+      rz.style.width = PAGE_W + 'px'; rz.style.height = 'auto'; rz.style.overflow = 'visible';
       rz.innerHTML = `<div class="editor-preview">${editedHtml}</div>`;
-      
       const ep = rz.firstElementChild;
-
-      await waitImages(ep, 2000);
-      await sleep(100);
-
+      await waitImages(ep, 2000); await sleep(100);
       const pages = paginateHtml(ep.innerHTML, ep);
-
-      rz.style.height   = PAGE_H + 'px';
-      rz.style.overflow = 'hidden';
-
+      rz.style.height = PAGE_H + 'px'; rz.style.overflow = 'hidden';
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-
       for (let p = 0; p < pages.length; p++) {
         if (p > 0) pdf.addPage();
         ep.innerHTML = pages[p];
         await sleep(80);
-
-        const canvas = await html2canvas(rz, {
-          scale:           2,
-          useCORS:         true,
-          allowTaint:      true,
-          logging:         false,
-          scrollX:         0,
-          scrollY:         0,
-          windowWidth:     PAGE_W,
-          width:           PAGE_W,
-          height:          PAGE_H,
-          backgroundColor: '#ffffff'
-        });
-
+        const canvas = await html2canvas(rz, { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: PAGE_W, width: PAGE_W, height: PAGE_H, backgroundColor: '#ffffff' });
         pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, MM_W, MM_H, '', 'FAST');
         canvas.width = canvas.height = 1; 
       }
-
       pdf.save(fileName);
-
     } catch (err) {
     } finally {
-      rz.innerHTML = '';
-      btn.disabled = false;
-      btn.innerHTML = 'Telecharger PDF';
-      isGenerating = false;
+      rz.innerHTML = ''; btn.disabled = false; btn.innerHTML = 'Telecharger PDF'; busy = false;
     }
+  });
+
+  $('downloadDocxBtn').addEventListener('click', async () => {
+    if (busy || !currentRowId) return;
+    busy = true; const btn = $('downloadDocxBtn'); btn.disabled = true; btn.innerHTML = 'Creation en cours...';
+    try {
+      const editedHtml = a4Page.innerHTML;
+      const fileName = getFileName("docx");
+      const content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+        body { font-family: 'Marianne', Arial, sans-serif; font-size: 14px; text-align: justify; line-height: 1.5; }
+        table { border-collapse: collapse; width: 100%; margin: 2rem 0; }
+        th, td { border: 1px solid lightgrey; padding: 0.5rem 1rem; }
+        img { max-width: 100%; height: auto; }
+      </style></head><body>${editedHtml}</body></html>`;
+      const blob = htmlDocx.asBlob(content, { orientation: 'portrait', margins: { top: 1000, right: 1000, bottom: 1000, left: 1000 } });
+      saveAs(blob, fileName);
+    } catch (err) {
+    } finally {
+      btn.disabled = false; btn.innerHTML = 'Telecharger DOCX'; busy = false;
+    }
+  });
+
+  /* ════════════════════════════════════════════════
+     2. GÉNÉRATION EN LOT (ZIP) ET RESTAURATION
+  ════════════════════════════════════════════════ */
+  $('genBtn').addEventListener('click', async () => {
+    if (busy) return;
+    $('result').style.display = 'none';
+
+    const modeleId = parseInt($('modelSelect').value);
+    if (!modeleId) return showResult('warn', 'Veuillez choisir un modèle.');
+
+    const start = parseInt($('startRow').value);
+    const end   = parseInt($('endRow').value);
+    if (isNaN(start) || isNaN(end) || start < 1 || end < start)
+      return showResult('err', 'Plage invalide.');
+
+    const slice = mappedRecords.slice(start - 1, end);
+    if (!slice.length) return showResult('warn', 'Aucun enregistrement dans cette plage.');
+    if (!htmlColKey)   return showResult('err',  'Aucune colonne HTML mappée.');
+
+    busy = true; cancelled = false;
+    $('genBtn').disabled = true;
+    $('cancelBtn').className = 'btn-cancel visible';
+    $('prog-area').className = 'on';
+
+    const rowIds      = slice.map(r => r.id);
+    const oldModeles  = rowIds.map(id => {
+      const row = allTableRows.find(r => r.id === id);
+      return row ? row['Modele'] : null;
+    });
+
+    try {
+      setProgress(0, slice.length, 'Application du modèle...');
+      await setModeleForRows(rowIds, modeleId);
+
+      setProgress(0, slice.length, 'Attente du recalcul Grist...');
+      let freshRows = null;
+      const maxWait = 120000;
+      const pollInterval = 800;
+      const startWait = Date.now();
+      
+      while (Date.now() - startWait < maxWait) {
+        await sleep(pollInterval);
+        try {
+          const raw  = await grist.docApi.fetchTable(tableId);
+          const cols = Object.keys(raw);
+          const n    = raw.id.length;
+          const rows = Array.from({ length: n }, (_, i) => {
+            const r = {}; cols.forEach(c => { r[c] = raw[c][i]; }); return r;
+          });
+
+          const allUpdated = rowIds.every(id => {
+            const row = rows.find(r => r.id === id);
+            if (!row || row['Modele'] !== modeleId) return false;
+            const html = row[htmlColKey];
+            if (!html || !html.trim()) return false;
+            return true;
+          });
+
+          if (allUpdated) {
+            freshRows = rows;
+            allTableRows = rows;
+            break;
+          }
+        } catch(e) {}
+      }
+
+      if (!freshRows) throw new Error("Timeout de calcul Grist.");
+
+      const zip  = new JSZip();
+      const used = new Set();
+      let ok = 0, skip = 0;
+
+      for (let i = 0; i < slice.length; i++) {
+        if (cancelled) { showResult('warn', `Annulé après ${ok} PDF générés.`); break; }
+
+        const mapped     = slice[i];
+        const updatedRow = freshRows.find(r => r.id === mapped.id) || mapped;
+        const html       = updatedRow[htmlColKey];
+
+        if (!html || !html.trim()) {
+          skip++; setProgress(i + 1, slice.length, `Ligne ignorée (HTML vide)`); continue;
+        }
+
+        const fullRow = allTableRows.find(r => r.id === mapped.id) || mapped;
+        let name = getBatchFileName(fullRow, start + i - 1);
+        let file = `${name}`;
+        if (used.has(file)) file = `${name.replace('.pdf', '')}_id${mapped.id}.pdf`;
+        used.add(file);
+
+        setProgress(i, slice.length, `Création : ${file}`);
+        try {
+          const blob = await htmlToBlob(html);
+          if (blob && blob.size > 500) { zip.file(file, blob); ok++; }
+          else skip++;
+        } catch (e) { skip++; }
+
+        setProgress(i + 1, slice.length, `${ok} PDF créés...`);
+      }
+
+      setProgress(slice.length, slice.length, 'Restauration des données...');
+      const restoreActions = rowIds.map((id, i) => ['UpdateRecord', tableId, id, { Modele: oldModeles[i] ?? 0 }]);
+      await grist.docApi.applyUserActions(restoreActions);
+
+      if (ok > 0) {
+        setProgress(slice.length, slice.length, 'Assemblage du ZIP...');
+        const zb = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:5} });
+        saveAs(zb, `Export_PDF.zip`);
+        showResult('ok', `🎉 ${ok} PDF générés${skip ? ` (${skip} ignorée(s))` : ''}`);
+      } else if (!cancelled) {
+        showResult('err', 'Aucun PDF valide généré.');
+      }
+
+    } catch (err) {
+      showResult('err', `Erreur : ${err.message}`);
+      try {
+        const restoreActions = rowIds.map((id, i) => ['UpdateRecord', tableId, id, { Modele: oldModeles[i] ?? 0 }]);
+        await grist.docApi.applyUserActions(restoreActions);
+      } catch (_) {}
+    }
+
+    rz.innerHTML = '';
+    busy = false; cancelled = false;
+    $('genBtn').disabled = false;
+    $('cancelBtn').className = 'btn-cancel';
   });
 
 })();
