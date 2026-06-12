@@ -19,7 +19,7 @@
     html, body {
       background: #f0f2f7 !important;
       color: #1a1d27 !important;
-      font-family: 'Marianne', 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Segoe UI', system-ui, sans-serif;
       font-size: 13px; line-height: 1.5;
       height: 100%;
     }
@@ -142,13 +142,14 @@
 
     #edit-content {
       padding: 10mm 15mm; min-height: 200px; outline: none;
-      font-family: 'Marianne', sans-serif; font-size: 14px; line-height: 1.4;
-      color: black; background: white;
+      font-family: sans-serif; font-size: 14px; line-height: 1.4;
+      color: black; background: white; text-align: justify;
     }
-    #edit-content table { margin:1rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; width:100%; }
+    #edit-content table { margin:1rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; width:100%; border-collapse:collapse; }
     #edit-content table th, #edit-content table td { border:1px solid lightgrey; padding:0.4rem 0.8rem; border-right:none; border-bottom:none; }
     #edit-content img { max-width:100%; height:auto; }
     #edit-content p { margin: 0.4em 0; }
+    #edit-content u { text-decoration: none; border-bottom: 1.5px solid currentColor; padding-bottom: 3px; }
 
     #render-zone {
       position: fixed; top: 0; left: -9999px;
@@ -156,7 +157,8 @@
       pointer-events: none; z-index: -1;
     }
     #render-zone .editor-preview {
-      font-family: 'Marianne', sans-serif; font-size: 14px; line-height: 1.4; text-align: justify;
+      font-family: 'Marianne', Arial, sans-serif !important;
+      font-size: 14px; line-height: 1.4; text-align: justify;
       color: black; background: white; padding: 10mm 15mm; width: 794px;
     }
     #render-zone .editor-preview code { background-color:#dfe9ff; padding:0 4px; border-radius:4px; color:black; }
@@ -164,7 +166,7 @@
     #render-zone .editor-preview pre { background-color:#eef3ff; padding:8px; border-radius:4px; }
     #render-zone .editor-preview pre code { background-color:unset; padding:unset; border-radius:unset; }
     #render-zone .editor-preview hr { margin-top:2rem; margin-bottom:2rem; border:none; border-top:1px solid #ddd; }
-    #render-zone .editor-preview table { margin:2rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; border-collapse:separate; width:100%; }
+    #render-zone .editor-preview table { margin:2rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; border-collapse:collapse; width:100%; }
     #render-zone .editor-preview table th,
     #render-zone .editor-preview table td { border:1px solid lightgrey; padding:0.5rem 1rem; border-right:none; border-bottom:none; color:black; }
     #render-zone .editor-preview table th:empty,
@@ -179,7 +181,7 @@
     #render-zone .editor-preview li  { margin:0.25em 0; }
     #render-zone .editor-preview strong { font-weight:bold; }
     #render-zone .editor-preview em     { font-style:italic; }
-    #render-zone .editor-preview u      { text-decoration:underline; }
+    #render-zone .editor-preview u      { text-decoration: none; border-bottom: 1.5px solid currentColor; padding-bottom: 3px; }
   </style>
 </head>
 <body>
@@ -430,7 +432,7 @@
     const el = $('col-status');
     if (htmlColKey && mappedRecords.length > 0) {
       el.className = 'ready';
-      $('col-txt').textContent = `"${htmlColKey}" : ${mappedRecords.length} ligne(s)`;
+      $('col-txt').textContent = `Colonne Mappee : ${mappedRecords.length} ligne(s)`;
       $('genBtnPdf').disabled = false;
       $('genBtnDocx').disabled = false;
     } else {
@@ -445,7 +447,7 @@
     const el = $('col-status-u');
     if (htmlColKey) {
       el.className = 'ready';
-      $('col-txt-u').textContent = `Colonne "${htmlColKey}" mappee`;
+      $('col-txt-u').textContent = `Colonne Mappee`;
     } else {
       el.className = 'waiting';
       $('col-txt-u').textContent = 'En attente du mapping de la colonne HTML';
@@ -490,7 +492,7 @@
         if (ok) { allTableRows = rows; return rows; }
       } catch(e) {}
     }
-    throw new Error("Timeout : Grist n'a pas recalcule les formules dans les temps.");
+    throw new Error("Timeout de calcul Grist.");
   }
 
   function resolveVar(row, key) {
@@ -644,7 +646,6 @@
 
     await resolveImagesFixed(ep);
     await waitImages(ep, 4000);
-    await document.fonts.ready;
     await sleep(300);
 
     const pages = paginateHtml(ep.innerHTML, ep);
@@ -673,13 +674,23 @@
 
     const imgs = ep.querySelectorAll('img');
     imgs.forEach(img => {
-      let nw = img.naturalWidth || 120;
-      let nh = img.naturalHeight || 120;
-      const maxW = 600;
-      if (nw > maxW) {
-        nh = Math.round((maxW / nw) * nh);
-        nw = maxW;
+      let specifiedWidth = img.getAttribute('width');
+      let specifiedHeight = img.getAttribute('height');
+      let nw, nh;
+
+      if (specifiedWidth) {
+        nw = parseInt(specifiedWidth);
+        nh = specifiedHeight ? parseInt(specifiedHeight) : (img.naturalHeight ? Math.round((img.naturalHeight / img.naturalWidth) * nw) : nw);
+      } else {
+        nw = img.naturalWidth || 120;
+        nh = img.naturalHeight || 120;
+        const maxW = 600;
+        if (nw > maxW) {
+          nh = Math.round((maxW / nw) * nh);
+          nw = maxW;
+        }
       }
+      
       img.setAttribute('width', nw);
       img.setAttribute('height', nh);
       img.style.width = nw + 'px';
@@ -698,6 +709,7 @@
         body { font-family: 'Marianne', Arial, sans-serif; font-size: 14px; line-height: 1.4; text-align: justify; }
         table { border-collapse: collapse; width: 100%; margin: 1em 0; }
         table td, table th { border: 1px solid #ccc; padding: 0.4em 0.8em; }
+        .page-break-marker { page-break-before: always; }
       </style></head>
       <body>${cleanHtml}</body></html>`;
       
@@ -726,7 +738,7 @@
   $('uLoadBtn').addEventListener('click', async () => {
     if (!currentRecord) return;
     const modeleId = parseInt($('uModelSelect').value);
-    if (!modeleId) return showResultU('warn', 'Veuillez choisir un modele.');
+    if (!modeleId) return showResultU('warn', 'Choisir un modele.');
 
     busy = true;
     $('uLoadBtn').disabled = true;
@@ -740,12 +752,12 @@
 
     try {
       await setModeleForRows([uRowId], modeleId);
-      setProgressU('Attente du recalcul Grist...');
+      setProgressU('Calcul Grist...');
       const fresh = await pollUntilReady([uRowId], modeleId);
       const updatedRow = fresh.find(r => r.id === uRowId);
       const html = updatedRow ? updatedRow[htmlColKey] : '';
 
-      if (!html?.trim()) throw new Error('HTML vide pour cette ligne.');
+      if (!html?.trim()) throw new Error('HTML vide.');
 
       const ec = $('edit-content');
       ec.innerHTML = html;
@@ -800,14 +812,14 @@
   $('uDownloadDocxBtn').addEventListener('click', async () => {
     $('uDownloadDocxBtn').disabled = true;
     $('prog-area-u').className = 'on';
-    setProgressU('Generation du document Word...');
+    setProgressU('Generation Word...');
     try {
       const html = $('edit-content').innerHTML;
       const blob = await htmlToDocxBlob(html);
       const row = allTableRows.find(r => r.id === uRowId) || {};
       const name = buildName(row, 'uNamePattern', 'Document');
       saveAs(blob, name + '.docx');
-      showResultU('ok', 'Document Word telecharge.');
+      showResultU('ok', 'Word telecharge.');
     } catch(err) {
       showResultU('err', 'Erreur : ' + err.message);
     }
@@ -833,7 +845,7 @@
     if (isNaN(start) || isNaN(end) || start < 1 || end < start) return showResult('err', 'Plage invalide.');
 
     const slice = mappedRecords.slice(start - 1, end);
-    if (!slice.length) return showResult('warn', 'Aucun enregistrement dans cette plage.');
+    if (!slice.length) return showResult('warn', 'Aucun enregistrement.');
     if (!htmlColKey)   return showResult('err', 'Aucune colonne HTML mappee.');
 
     busy = true; cancelled = false;
@@ -849,13 +861,13 @@
       setProgress(0, slice.length, 'Application du modele...');
       await setModeleForRows(rowIds, modeleId);
 
-      setProgress(0, slice.length, 'Attente du recalcul Grist...');
+      setProgress(0, slice.length, 'Attente Grist...');
       const freshRows = await pollUntilReady(rowIds, modeleId);
 
       const zip = new JSZip(); const used = new Set(); let ok = 0, skip = 0;
 
       for (let i = 0; i < slice.length; i++) {
-        if (cancelled) { showResult('warn', `Annule apres ${ok} fichiers generes.`); break; }
+        if (cancelled) { showResult('warn', `Annule apres ${ok} fichiers.`); break; }
         const mapped = slice[i];
         const updatedRow = freshRows.find(r => r.id === mapped.id) || mapped;
         const html = updatedRow[htmlColKey];
@@ -876,7 +888,7 @@
         setProgress(i+1, slice.length, `${ok} fichiers crees...`);
       }
 
-      setProgress(slice.length, slice.length, 'Restauration des donnees...');
+      setProgress(slice.length, slice.length, 'Restauration...');
       await grist.docApi.applyUserActions(rowIds.map((id, i) => ['UpdateRecord', tableId, id, { Modele: oldModeles[i] ?? 0 }]));
 
       if (ok > 0) {
