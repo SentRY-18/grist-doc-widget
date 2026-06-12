@@ -2,146 +2,321 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Editeur et Export Grist</title>
+  <title>Export PDF / Word</title>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://unpkg.com/html-docx-js/dist/html-docx.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      background: #e5e7eb !important;
+      background: #f0f2f7 !important;
       color: #1a1d27 !important;
       font-family: 'Segoe UI', system-ui, sans-serif;
       font-size: 13px; line-height: 1.5;
-      height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+      height: 100%;
     }
 
-    #top-panel {
-      background: #fff; border-bottom: 1px solid #d1d5db; padding: 12px 20px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05); z-index: 10; flex-shrink: 0;
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #e2e5ed;
+      background: #fff;
+      padding: 0 14px;
     }
-    
-    .row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
-    .row:last-child { margin-bottom: 0; }
-    
-    .field-group { display: flex; align-items: center; gap: 6px; }
-    .field-group label { font-weight: 600; font-size: 12px; color: #4b5563; }
-    
-    input[type="number"] { width: 60px; padding: 6px; border: 1px solid #d1d5db; border-radius: 4px; text-align: center; }
-    input[type="text"] { width: 250px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; }
-    select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; min-width: 180px; }
-    input:focus, select:focus { outline: none; border-color: #4f5de8; box-shadow: 0 0 0 3px rgba(79,93,232,.1); }
-
-    button {
-      background: #f3f4f6; color: #374151; border: 1px solid #d1d5db;
-      padding: 7px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
-      cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 5px;
+    .tab-btn {
+      padding: 10px 18px;
+      border: none; background: none;
+      font-size: 12px; font-weight: 600;
+      color: #6b7280; cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
     }
-    button:hover:not(:disabled) { background: #e5e7eb; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    
-    .btn-primary { background: linear-gradient(135deg,#4f5de8,#6b78f0); color: white; border: none; box-shadow: 0 2px 4px rgba(79,93,232,.3); }
-    .btn-primary:hover:not(:disabled) { background: linear-gradient(135deg,#3f4ac0,#5a65d8); color: white; }
-    
-    .btn-nav { font-size: 14px; padding: 6px 10px; }
-    
-    #status-badge {
-      background: #f3f4f6; color: #4b5563; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-left: auto;
+    .tab-btn.active { color: #4f5de8; border-bottom-color: #4f5de8; }
+
+    .tab-pane { display: none; padding: 14px; }
+    .tab-pane.active { display: block; }
+
+    .card {
+      background: #fff !important;
+      border: 1px solid #e2e5ed; border-radius: 8px;
+      padding: 16px 18px; box-shadow: 0 2px 10px rgba(0,0,0,.07);
+      margin-bottom: 12px;
+    }
+    .card, .card > *:not(#edit-content):not(#render-zone) { color: #1a1d27; }
+
+    .hdr { padding-bottom: 11px; border-bottom: 1px solid #e2e5ed; margin-bottom: 13px; }
+    .hdr-t { font-size: 14px; font-weight: 700; }
+
+    #col-status, #col-status-u {
+      display:flex; align-items:center; gap:6px;
+      padding:7px 10px; border-radius:6px; font-size:12px; font-weight:600;
+      background:#fffbeb; color:#b45309; border:1px solid #fde68a;
+      margin-bottom:12px;
+    }
+    #col-status.ready, #col-status-u.ready { background:#ecfdf5; color:#065f46; border-color:#6ee7b7; }
+    .dot { width:7px; height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
+
+    .sec { font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#6b7280; margin-bottom:7px; }
+    .field { margin-bottom:10px; }
+    .field label { display:block; font-weight:600; font-size:12px; margin-bottom:4px; color:#1a1d27; }
+    .field label span { font-weight:400; color:#6b7280; }
+
+    input[type="text"], input[type="number"], select {
+      display:block; width:100%; padding:8px 10px;
+      border:1.5px solid #d1d5db; border-radius:6px;
+      font-size:13px; font-family:inherit;
+      background:#f9fafb; color:#111827;
+      appearance: none; -webkit-appearance: none;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px;
+    }
+    input:focus, select:focus { outline:none; border-color:#4f5de8; box-shadow:0 0 0 3px rgba(79,93,232,.13); background:#fff; }
+
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .hint { font-size:11px; color:#6b7280; margin-top:3px; }
+    hr { border:none; border-top:1px solid #e5e7eb; margin:12px 0; }
+
+    .callout {
+      display:flex; gap:8px; padding:8px 10px;
+      background:#eef2ff; border:1px solid #c7d2fe; border-radius:6px;
+      font-size:11.5px; color:#3730a3; line-height:1.5;
     }
 
-    .controls-row {
-      display: flex; justify-content: space-between; align-items: center;
-      background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;
+    .btn {
+      padding:10px 16px; border:none; border-radius:7px;
+      font-size:13px; font-weight:700; font-family:inherit;
+      cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+      transition:opacity .2s;
     }
-    .nav-controls, .export-controls { display: flex; align-items: center; gap: 8px; }
-    #nav-lbl { font-weight: 700; font-size: 13px; min-width: 80px; text-align: center; }
+    .btn-primary { background:linear-gradient(135deg,#4f5de8,#6b78f0); color:#fff; box-shadow:0 4px 14px rgba(79,93,232,.28); }
+    .btn-primary:hover:not(:disabled) { opacity:.9; }
+    .btn-primary:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
+    .btn-secondary { background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; }
+    .btn-secondary:hover:not(:disabled) { background:#e2e8f0; }
+    .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-danger { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+    .btn-danger:hover { background:#fecaca; }
+    .btn-full { width:100%; }
+    .btn-row { display:flex; gap:8px; margin-top:4px; }
+    .btn-row .btn { flex:1; }
 
-    #prog-area { display: none; margin-top: 10px; }
-    #prog-area.on { display: block; }
-    .pbar-wrap { height: 6px; background: #e5e7eb; border-radius: 10px; overflow: hidden; margin-bottom: 4px; }
-    .pbar-fill { height: 100%; background: linear-gradient(90deg,#4f5de8,#7c86f7); width: 0%; transition: width 0.3s; }
-    .pbar-info { display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: #6b7280; }
+    #prog-area-l, #prog-area-u { display:none; margin-top:12px; }
+    #prog-area-l.on, #prog-area-u.on { display:block; }
+    .pbar-wrap { height:5px; background:#e5e7eb; border-radius:99px; overflow:hidden; margin-bottom:6px; }
+    .pbar-fill  { height:100%; background:linear-gradient(90deg,#4f5de8,#7c86f7); border-radius:99px; transition:width .3s; width:0%; }
+    .pbar-info  { display:flex; justify-content:space-between; font-size:11.5px; }
+    .pbar-lbl   { font-weight:600; }
+    .pbar-cnt   { color:#6b7280; }
 
-    #editor-wrapper { flex: 1; overflow-y: auto; padding: 30px 20px; display: flex; justify-content: center; }
-    #a4-page {
-      background: white; width: 210mm; min-height: 297mm;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.15); border-radius: 2px;
-      outline: none; position: relative;
+    #result-l, #result-u { display:none; padding:9px 12px; border-radius:6px; font-size:12.5px; font-weight:600; margin-top:10px; text-align:center; }
+    .ok   { background:#ecfdf5; color:#065f46; border:1px solid #6ee7b7; }
+    .err  { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
+    .warn { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+
+    /* Aperçu éditable */
+    #preview-wrap {
+      border: 2px solid #e2e5ed; border-radius: 6px;
+      overflow: hidden; margin-bottom: 12px;
+      max-height: 60vh; overflow-y: auto;
     }
-    #empty-state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #9ca3af; font-size: 15px; font-weight: 500; text-align: center; }
-
-    .editor-preview {
-      font-family: 'Marianne', Arial, sans-serif;
-      font-size: 14px; line-height: 1.5; text-align: justify;
-      color: black; padding: 10mm 15mm; 
+    #preview-wrap:focus-within { border-color: #4f5de8; }
+    #preview-toolbar {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      padding: 6px 8px; background: #f8fafc; border-bottom: 1px solid #e2e5ed;
+      position: sticky; top: 0; z-index: 5;
     }
-    .editor-preview code { background-color:#dfe9ff; padding:0 4px; border-radius:4px; color:black; }
-    .editor-preview blockquote { border-left:4px solid #ddd; margin:0; padding:0 1rem; color:#666; }
-    .editor-preview pre { background-color:#eef3ff; padding:8px; border-radius:4px; }
-    .editor-preview hr { margin-top:2rem; margin-bottom:2rem; border:none; border-top:1px solid #ddd; }
-    .editor-preview table { margin:2rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; border-collapse:collapse; width:100%; }
-    .editor-preview table th, .editor-preview table td { border:1px solid lightgrey; padding:0.5rem 1rem; border-right:none; border-bottom:none; color:black; }
-    .editor-preview table th:empty, .editor-preview table td:empty { height:0px; padding:0px; border-top:none; }
-    .editor-preview img { max-width:100%; height:auto; }
-    .editor-preview p { margin:0.5em 0; }
-    .editor-preview u { text-decoration: none; border-bottom: 1.5px solid currentColor; padding-bottom: 3px; }
+    #preview-toolbar button {
+      padding: 3px 8px; border: 1px solid #d1d5db; border-radius: 4px; background: #fff;
+      font-size: 12px; cursor: pointer; font-family: inherit; color: #374151;
+    }
+    #preview-toolbar button:hover { background: #f1f5f9; }
+    #preview-toolbar .sep { width:1px; background:#e2e5ed; margin: 0 2px; align-self:stretch; }
 
-    .page-break-marker { border-top: 2px dashed #cbd5e1 !important; margin: 30px 0 !important; text-align: center; position: relative; }
-    .page-break-marker::after { content: "Saut de page"; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #f8fafc; padding: 0 10px; color: #64748b; font-size: 11px; font-weight: bold; }
+    #edit-content {
+      padding: 10mm 15mm; min-height: 200px; outline: none;
+      font-family: sans-serif; font-size: 14px; line-height: 1.4;
+      color: black; background: white;
+    }
+    #edit-content table { margin:1rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; width:100%; }
+    #edit-content table th, #edit-content table td { border:1px solid lightgrey; padding:0.4rem 0.8rem; border-right:none; border-bottom:none; }
+    #edit-content img { max-width:100%; height:auto; }
+    #edit-content p { margin: 0.4em 0; }
 
-    #render-zone { position: fixed; top: 0; left: -9999px; width: 794px; background: white; pointer-events: none; z-index: -1; }
+    #render-zone {
+      position: fixed; top: 0; left: -9999px;
+      width: 794px; background: white;
+      pointer-events: none; z-index: -1;
+    }
+    #render-zone .editor-preview {
+      font-family: sans-serif; font-size: 14px; line-height: 1.4;
+      color: black; background: white; padding: 10mm 15mm; width: 794px;
+    }
+    #render-zone .editor-preview code { background-color:#dfe9ff; padding:0 4px; border-radius:4px; color:black; }
+    #render-zone .editor-preview blockquote { border-left:4px solid #ddd; margin:0; padding:0 1rem; color:#666; }
+    #render-zone .editor-preview pre { background-color:#eef3ff; padding:8px; border-radius:4px; }
+    #render-zone .editor-preview pre code { background-color:unset; padding:unset; border-radius:unset; }
+    #render-zone .editor-preview hr { margin-top:2rem; margin-bottom:2rem; border:none; border-top:1px solid #ddd; }
+    #render-zone .editor-preview table { margin:2rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; border-collapse:separate; width:100%; }
+    #render-zone .editor-preview table th,
+    #render-zone .editor-preview table td { border:1px solid lightgrey; padding:0.5rem 1rem; border-right:none; border-bottom:none; color:black; }
+    #render-zone .editor-preview table th:empty,
+    #render-zone .editor-preview table td:empty { height:0px; padding:0px; border-top:none; }
+    #render-zone .editor-preview img { max-width:100%; height:auto; }
+    #render-zone .editor-preview p   { margin:0.5em 0; }
+    #render-zone .editor-preview h1  { font-size:2em;    margin:0.67em 0; font-weight:bold; }
+    #render-zone .editor-preview h2  { font-size:1.5em;  margin:0.75em 0; font-weight:bold; }
+    #render-zone .editor-preview h3  { font-size:1.17em; margin:0.83em 0; font-weight:bold; }
+    #render-zone .editor-preview ul,
+    #render-zone .editor-preview ol  { margin:0.5em 0 0.5em 2em; }
+    #render-zone .editor-preview li  { margin:0.25em 0; }
+    #render-zone .editor-preview strong { font-weight:bold; }
+    #render-zone .editor-preview em     { font-style:italic; }
+    #render-zone .editor-preview u      { text-decoration:underline; }
   </style>
 </head>
 <body>
 
-<div id="top-panel">
-  <div class="row">
-    <div class="field-group">
-      <label>Lignes :</label>
-      <input type="number" id="startRow" value="1" min="1"> a <input type="number" id="endRow" value="10" min="1">
-    </div>
-    <div class="field-group" style="margin-left: 10px;">
-      <label>Modele :</label>
-      <select id="modelSelect"><option value="">Chargement...</option></select>
-    </div>
-    <button id="applyBtn" class="btn-primary">Appliquer au lot</button>
-    <div id="status-badge">Pret</div>
-  </div>
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('unitaire')">Impression unitaire</button>
+  <button class="tab-btn" onclick="switchTab('lot')">Impression en lot</button>
+</div>
 
-  <div class="row">
-    <div class="field-group">
-      <label>Nom Fichier :</label>
-      <input type="text" id="namePattern" value="{Nom_fichier}">
-    </div>
-  </div>
+<!-- ═══ ONGLET UNITAIRE ═══ -->
+<div id="tab-unitaire" class="tab-pane active">
+  <div class="card">
+    <div class="hdr"><div class="hdr-t">Impression unitaire</div></div>
 
-  <div class="row controls-row">
-    <div class="nav-controls">
-      <button id="prevBtn" class="btn-nav">&lt;</button>
-      <span id="nav-lbl">Ligne -- / --</span>
-      <button id="nextBtn" class="btn-nav">&gt;</button>
+    <div id="col-status-u" class="waiting">
+      <span class="dot"></span>
+      <span id="col-txt-u">En attente du mapping de la colonne HTML</span>
     </div>
-    <div class="export-controls">
-      <button id="dlPdfBtn" style="color:#dc2626;">PDF (Courant)</button>
-      <button id="dlDocxBtn" style="color:#2563eb;">DOCX (Courant)</button>
-      <div style="width: 2px; height: 20px; background: #cbd5e1; margin: 0 5px;"></div>
-      <button id="zipPdfBtn">Lot ZIP (PDF)</button>
-      <button id="zipDocxBtn">Lot ZIP (DOCX)</button>
-    </div>
-  </div>
 
-  <div id="prog-area">
-    <div class="pbar-wrap"><div class="pbar-fill" id="pbar"></div></div>
-    <div class="pbar-info"><span id="prog-lbl">Initialisation...</span><span id="prog-cnt">0 / 0</span></div>
+    <div id="u-no-row" class="hint" style="margin-bottom:10px;">
+      Sélectionnez une ligne dans la table pour commencer.
+    </div>
+
+    <div id="u-config" style="display:none">
+      <div class="sec">Ligne sélectionnée</div>
+      <div class="hint" id="u-row-info" style="margin-bottom:10px;"></div>
+
+      <div class="sec">Modèle à appliquer</div>
+      <div class="field">
+        <label>Modèle de document</label>
+        <select id="uModelSelect"><option value="">— Choisir un modèle —</option></select>
+      </div>
+
+      <hr>
+
+      <div class="sec">Nom du fichier</div>
+      <div class="field">
+        <label>Modèle de nom <span>(variables : {Nom_Colonne})</span></label>
+        <input type="text" id="uNamePattern" value="{Nom_fichier}">
+      </div>
+
+      <button id="uLoadBtn" class="btn btn-primary btn-full" disabled>
+        Charger l'aperçu
+      </button>
+    </div>
+
+    <div id="u-preview-zone" style="display:none; margin-top:12px;">
+      <div class="sec">Aperçu (modifiable)</div>
+
+      <div id="preview-wrap">
+        <div id="preview-toolbar">
+          <button onclick="fmt('bold')"><b>G</b></button>
+          <button onclick="fmt('italic')"><i>I</i></button>
+          <button onclick="fmt('underline')"><u>S</u></button>
+          <div class="sep"></div>
+          <button onclick="fmt('justifyLeft')">Gauche</button>
+          <button onclick="fmt('justifyCenter')">Centrer</button>
+          <button onclick="fmt('justifyRight')">Droite</button>
+          <div class="sep"></div>
+          <button onclick="fmt('insertUnorderedList')">Liste</button>
+        </div>
+        <div id="edit-content" contenteditable="true" spellcheck="false"></div>
+      </div>
+
+      <div class="btn-row">
+        <button id="uDownloadPdfBtn" class="btn btn-primary">Télécharger PDF</button>
+        <button id="uDownloadDocxBtn" class="btn btn-secondary">Télécharger Word</button>
+      </div>
+      <div class="btn-row">
+        <button id="uBackBtn" class="btn btn-secondary btn-full">Retour</button>
+      </div>
+    </div>
+
+    <div id="prog-area-u">
+      <div class="pbar-wrap"><div class="pbar-fill" id="pbar-u"></div></div>
+      <div class="pbar-info">
+        <span class="pbar-lbl" id="prog-lbl-u">Initialisation…</span>
+      </div>
+    </div>
+    <div id="result-u"></div>
   </div>
 </div>
 
-<div id="editor-wrapper">
-  <div id="a4-page" class="editor-preview" contenteditable="true" spellcheck="false">
-    <div id="empty-state">Definissez la plage de lignes et appliquez un modele pour commencer.</div>
+<!-- ═══ ONGLET LOT ═══ -->
+<div id="tab-lot" class="tab-pane">
+  <div class="card">
+    <div class="hdr"><div class="hdr-t">Impression en lot</div></div>
+
+    <div id="col-status" class="waiting">
+      <span class="dot"></span>
+      <span id="col-txt">En attente du mapping de la colonne HTML</span>
+    </div>
+
+    <div class="sec">Modèle à appliquer</div>
+    <div class="field">
+      <label>Modèle de document</label>
+      <select id="modelSelect"><option value="">— Chargement… —</option></select>
+    </div>
+    <div class="callout">
+      <span>Le modèle sera appliqué à toutes les lignes de la plage. Les valeurs précédentes seront <strong>restaurées</strong> après génération.</span>
+    </div>
+
+    <hr>
+
+    <div class="sec">Plage de lignes</div>
+    <div class="row2">
+      <div class="field">
+        <label>De la ligne N°</label>
+        <input type="number" id="startRow" value="1" min="1">
+      </div>
+      <div class="field">
+        <label>À la ligne N°</label>
+        <input type="number" id="endRow" value="10" min="1">
+      </div>
+    </div>
+    <div class="hint" id="row-hint">— chargement…</div>
+
+    <hr>
+
+    <div class="sec">Nom des fichiers</div>
+    <div class="field">
+      <label>Modèle de nom <span>(variables : {Nom_Colonne})</span></label>
+      <input type="text" id="namePattern" value="{Nom_fichier}">
+    </div>
+
+    <div class="btn-row">
+      <button id="genBtnPdf" class="btn btn-primary" disabled>ZIP de PDF</button>
+      <button id="genBtnDocx" class="btn btn-secondary" disabled>ZIP de Word</button>
+    </div>
+    <div class="btn-row">
+      <button id="cancelBtn" class="btn btn-danger btn-full" style="display:none">Annuler</button>
+    </div>
+
+    <div id="prog-area-l">
+      <div class="pbar-wrap"><div class="pbar-fill" id="pbar"></div></div>
+      <div class="pbar-info">
+        <span class="pbar-lbl" id="prog-lbl">Initialisation…</span>
+        <span class="pbar-cnt" id="prog-cnt">0 / 0</span>
+      </div>
+    </div>
+    <div id="result-l"></div>
   </div>
 </div>
 
@@ -153,19 +328,28 @@
 
   const $ = id => document.getElementById(id);
   const rz = $('render-zone');
-  const a4Page = $('a4-page');
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   let mappedRecords = [];
   let allTableRows  = [];
   let htmlColKey    = null;
   let tableId       = null;
+  let cancelled     = false;
   let busy          = false;
-  
-  let rangeStart = 1;
-  let rangeEnd = 1;
-  let currentIndex = 0;
-  let currentRecordId = null;
+
+  let currentRecord = null;
+
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+      const names = ['unitaire','lot'];
+      b.classList.toggle('active', names[i] === name);
+    });
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    $('tab-' + name).classList.add('active');
+  }
+  window.switchTab = switchTab;
+
+  window.fmt = cmd => { document.execCommand(cmd, false, null); $('edit-content').focus(); };
 
   grist.ready({
     requiredAccess: 'full',
@@ -174,28 +358,46 @@
 
   grist.on('message', e => { if (e.tableId) tableId = e.tableId; });
 
+  grist.onRecord(async (record, mappings) => {
+    if (busy) return;
+    const key = (mappings && mappings.col_html)
+      ? mappings.col_html
+      : (record ? Object.keys(record).filter(k => k !== 'id')[0] : null);
+    htmlColKey = key;
+    currentRecord = record || null;
+    updateUnitaireUI();
+  });
+
   grist.onRecords(async (records, mappings) => {
     mappedRecords = records || [];
     htmlColKey = (mappings && mappings.col_html)
       ? mappings.col_html
       : (records.length ? Object.keys(records[0]).filter(k => k !== 'id')[0] : null);
 
+    updateStatus();
+    $('row-hint').textContent = `— ${mappedRecords.length} ligne(s) disponible(s)`;
     if (!busy) $('endRow').value = mappedRecords.length || 10;
-    await loadFullTable();
+    if (!busy) await loadFullTable();
   });
 
   async function loadFullTable() {
     try {
       const tbl = await grist.getTable();
-      const id = tbl._platform ? await tbl._platform.getTableId() : await tbl.getTableId();
+      let id;
+      if (typeof tbl.getTableId === 'function') id = await tbl.getTableId();
+      else if (tbl._platform?.getTableId) id = await tbl._platform.getTableId();
+      else { allTableRows = mappedRecords; return; }
       if (!tableId) tableId = id;
-      const raw = await grist.docApi.fetchTable(id);
+
+      const raw  = await grist.docApi.fetchTable(id);
       const cols = Object.keys(raw);
-      allTableRows = Array.from({ length: raw.id.length }, (_, i) => {
+      const n    = raw.id.length;
+      allTableRows = Array.from({ length: n }, (_, i) => {
         const r = {}; cols.forEach(c => { r[c] = raw[c][i]; }); return r;
       });
       await loadModeles();
     } catch (e) {
+      console.warn('fetchTable échoué:', e);
       allTableRows = mappedRecords;
     }
   }
@@ -203,114 +405,91 @@
   async function loadModeles() {
     try {
       const raw = await grist.docApi.fetchTable('Modeles');
-      const sel = $('modelSelect');
-      const currentVal = sel.value;
-      sel.innerHTML = '<option value="">Choisir un modele</option>';
-      for (let i = 0; i < raw.id.length; i++) {
-        const nom = raw['Nom_du_modele']?.[i] || raw['Nom']?.[i] || raw['nom']?.[i] || `Modele ${raw.id[i]}`;
-        const opt = document.createElement('option');
-        opt.value = raw.id[i]; opt.textContent = nom;
-        sel.appendChild(opt);
-      }
-      if (currentVal) sel.value = currentVal;
-    } catch (e) {
-      $('modelSelect').innerHTML = '<option value="">Table Modeles introuvable</option>';
-    }
-  }
-
-  $('applyBtn').addEventListener('click', async () => {
-    if (busy) return;
-    const modeleId = parseInt($('modelSelect').value);
-    if (!modeleId) return alert("Veuillez choisir un modele.");
-    
-    rangeStart = parseInt($('startRow').value);
-    rangeEnd = parseInt($('endRow').value);
-    if (isNaN(rangeStart) || isNaN(rangeEnd) || rangeStart > rangeEnd) return alert("Plage invalide.");
-
-    const slice = mappedRecords.slice(rangeStart - 1, rangeEnd);
-    if (!slice.length) return alert("Aucune ligne dans cette plage.");
-
-    setBusy(true, "Application du modele...");
-    
-    try {
-      const rowIds = slice.map(r => r.id);
-      await grist.docApi.applyUserActions(rowIds.map(id => ['UpdateRecord', tableId, id, { Modele: modeleId }]));
-      
-      let freshRows = null;
-      for(let i=0; i<20; i++) {
-        await sleep(600);
-        const raw = await grist.docApi.fetchTable(tableId);
-        const allUpdated = rowIds.every(id => {
-          const idx = raw.id.indexOf(id);
-          return idx !== -1 && raw['Modele'][idx] === modeleId && raw[htmlColKey][idx] && raw[htmlColKey][idx].trim();
-        });
-        if (allUpdated) {
-          const cols = Object.keys(raw);
-          freshRows = Array.from({ length: raw.id.length }, (_, j) => {
-            const r = {}; cols.forEach(c => { r[c] = raw[c][j]; }); return r;
-          });
-          allTableRows = freshRows;
-          break;
+      const n   = raw.id.length;
+      const buildOptions = sel => {
+        sel.innerHTML = '<option value="">— Choisir un modèle —</option>';
+        for (let i = 0; i < n; i++) {
+          const nom = raw['Nom_du_modele']?.[i] || raw['Nom']?.[i] || `Modèle ${raw.id[i]}`;
+          const opt = document.createElement('option');
+          opt.value = raw.id[i];
+          opt.textContent = nom;
+          sel.appendChild(opt);
         }
-      }
-      
-      if (!freshRows) throw new Error("Timeout Grist.");
-      
-      currentIndex = 0;
-      updateNavigationUI();
-      loadCurrentDocument();
-
+      };
+      buildOptions($('modelSelect'));
+      buildOptions($('uModelSelect'));
     } catch (e) {
-      alert("Erreur: " + e.message);
-    } finally {
-      setBusy(false);
+      ['modelSelect','uModelSelect'].forEach(id => {
+        $(id).innerHTML = '<option value="">— Table Modeles introuvable —</option>';
+      });
     }
-  });
-
-  function updateNavigationUI() {
-    $('nav-lbl').textContent = `Ligne ${rangeStart + currentIndex} / ${rangeEnd}`;
-    const sliceLen = (rangeEnd - rangeStart) + 1;
-    $('prevBtn').disabled = (currentIndex <= 0);
-    $('nextBtn').disabled = (currentIndex >= sliceLen - 1);
   }
 
-  $('prevBtn').addEventListener('click', () => { if (currentIndex > 0) { currentIndex--; updateNavigationUI(); loadCurrentDocument(); }});
-  $('nextBtn').addEventListener('click', () => { const max = rangeEnd - rangeStart; if (currentIndex < max) { currentIndex++; updateNavigationUI(); loadCurrentDocument(); }});
-
-  async function loadCurrentDocument() {
-    const slice = mappedRecords.slice(rangeStart - 1, rangeEnd);
-    if (!slice[currentIndex]) return;
-    
-    currentRecordId = slice[currentIndex].id;
-    const row = allTableRows.find(r => r.id === currentRecordId);
-    
-    if (row && row[htmlColKey]) {
-      a4Page.innerHTML = row[htmlColKey];
-      await resolveImages(a4Page);
+  function updateStatus() {
+    const el = $('col-status');
+    if (htmlColKey && mappedRecords.length > 0) {
+      el.className = 'ready';
+      $('col-txt').textContent = `"${htmlColKey}" — ${mappedRecords.length} ligne(s)`;
+      $('genBtnPdf').disabled = false;
+      $('genBtnDocx').disabled = false;
     } else {
-      a4Page.innerHTML = `<div id="empty-state">Modele HTML vide pour la ligne ${currentRecordId}.</div>`;
+      el.className = 'waiting';
+      $('col-txt').textContent = 'En attente du mapping de la colonne HTML';
+      $('genBtnPdf').disabled = true;
+      $('genBtnDocx').disabled = true;
     }
   }
 
-  function setBusy(state, msg = "") {
-    busy = state;
-    if (state) {
-      $('status-badge').textContent = `En cours : ${msg}`;
-      $('status-badge').style.background = '#fffbeb';
+  function updateUnitaireUI() {
+    const el = $('col-status-u');
+    if (htmlColKey) {
+      el.className = 'ready';
+      $('col-txt-u').textContent = `Colonne "${htmlColKey}" mappée`;
     } else {
-      $('status-badge').textContent = `Pret`;
-      $('status-badge').style.background = '#f3f4f6';
-      $('prog-area').className = '';
+      el.className = 'waiting';
+      $('col-txt-u').textContent = 'En attente du mapping de la colonne HTML';
     }
-    $('applyBtn').disabled = state;
-    $('dlPdfBtn').disabled = state; $('dlDocxBtn').disabled = state;
-    $('zipPdfBtn').disabled = state; $('zipDocxBtn').disabled = state;
+
+    if (currentRecord) {
+      $('u-no-row').style.display = 'none';
+      $('u-config').style.display = 'block';
+      const idCol = allTableRows.length && allTableRows[0]['N_Etablissement'] !== undefined
+        ? 'N_Etablissement' : null;
+      const label = idCol ? `${idCol} : ${currentRecord[idCol] ?? ''} (ligne id ${currentRecord.id})`
+                           : `Ligne id ${currentRecord.id}`;
+      $('u-row-info').textContent = label;
+      $('uLoadBtn').disabled = !htmlColKey;
+    } else {
+      $('u-no-row').style.display = 'block';
+      $('u-config').style.display = 'none';
+      $('u-preview-zone').style.display = 'none';
+    }
   }
 
-  function setProgress(cur, tot, lbl) {
-    $('pbar').style.width = tot > 0 ? Math.round(cur/tot*100)+'%' : '0%';
-    $('prog-lbl').textContent = lbl;
-    $('prog-cnt').textContent = `${cur} / ${tot}`;
+  async function setModeleForRows(rowIds, modeleId) {
+    const actions = rowIds.map(id => ['UpdateRecord', tableId, id, { Modele: modeleId }]);
+    await grist.docApi.applyUserActions(actions);
+  }
+
+  async function pollUntilReady(rowIds, modeleId) {
+    const maxWait = 120000, pollInterval = 800;
+    const startWait = Date.now();
+    while (Date.now() - startWait < maxWait) {
+      await sleep(pollInterval);
+      try {
+        const raw  = await grist.docApi.fetchTable(tableId);
+        const cols = Object.keys(raw);
+        const rows = Array.from({ length: raw.id.length }, (_, i) => {
+          const r = {}; cols.forEach(c => { r[c] = raw[c][i]; }); return r;
+        });
+        const ok = rowIds.every(id => {
+          const row = rows.find(r => r.id === id);
+          return row && row['Modele'] === modeleId && row[htmlColKey]?.trim();
+        });
+        if (ok) { allTableRows = rows; return rows; }
+      } catch(e) { console.warn('poll error:', e); }
+    }
+    throw new Error("Timeout : Grist n'a pas recalculé les formules dans les 2 minutes.");
   }
 
   function resolveVar(row, key) {
@@ -321,47 +500,55 @@
       const [colRef, colProp] = key.split('.');
       const cand = Object.keys(row).find(k => k === colProp || k.endsWith('_' + colProp) || k === colRef + '_' + colProp);
       if (cand) return String(row[cand] ?? '').trim();
+      if (colRef in row) return String(row[colRef] ?? '').trim();
     }
     return '';
   }
-
-  function getFileName(row, ext, isBatch = false) {
-    const pat = $('namePattern').value.trim() || `Document`;
-    let name = pat.replace(/\{([^}]+)\}/g, (m, k) => resolveVar(row, k.trim()));
-    name = name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim();
-    return `${name}.${ext}`;
+  function buildName(row, patternInput, fallback) {
+    const pat = $(patternInput).value.trim() || fallback;
+    return pat
+      .replace(/\{([^}]+)\}/g, (m, k) => resolveVar(row, k.trim()))
+      .replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim()
+      .slice(0, 200) || fallback;
   }
 
-  async function resolveImages(container) {
+  async function getAuthToken() {
+    try { const ti = await grist.docApi.getAccessToken({ readOnly: true }); return ti.token; }
+    catch(e) { return null; }
+  }
+
+  async function resolveImagesFixed(container) {
     const imgs = Array.from(container.querySelectorAll('img'));
     if (!imgs.length) return;
-    let authToken = null;
-    try { authToken = (await grist.docApi.getAccessToken({ readOnly: true })).token; } catch(e) {}
-    
+    const authToken = await getAuthToken();
     await Promise.all(imgs.map(async img => {
       const src = img.getAttribute('src') || '';
       if (!src || src.startsWith('data:')) return;
       try {
-        let fetchUrl = src.startsWith('http') ? src : (location.origin + src);
-        if (authToken && fetchUrl.includes('/attachments/')) {
-          fetchUrl = fetchUrl.replace(/[?&]auth=[^&]+/, '');
-          fetchUrl += (fetchUrl.includes('?') ? '&' : '?') + 'auth=' + authToken;
+        let url = src.startsWith('http') ? src : (location.origin + src);
+        if (authToken && url.includes('/attachments/')) {
+          url = url.replace(/[?&]auth=[^&]+/, '');
+          url += (url.includes('?') ? '&' : '?') + 'auth=' + authToken;
         }
-        const r = await fetch(fetchUrl, { credentials: 'omit' });
+        const r = await fetch(url, { credentials: 'omit' });
         if (!r.ok) return;
         const blob = await r.blob();
-        img.src = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(blob); });
-      } catch (e) {}
+        img.src = await new Promise((res, rej) => {
+          const fr = new FileReader();
+          fr.onload = () => res(fr.result); fr.onerror = rej;
+          fr.readAsDataURL(blob);
+        });
+      } catch(e) {}
     }));
   }
 
-  function waitImages(el) {
+  function waitImages(el, ms = 4000) {
     const imgs = Array.from(el.querySelectorAll('img'));
     if (!imgs.length) return Promise.resolve();
     return Promise.all(imgs.map(img => new Promise(res => {
       if (img.complete && img.naturalWidth > 0) return res();
       img.onload = img.onerror = res;
-      setTimeout(res, 3000);
+      setTimeout(res, ms);
     })));
   }
 
@@ -375,191 +562,322 @@
     tmp.innerHTML = html;
     let children = Array.from(tmp.childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
 
-    if (children.length === 1 && children[0].nodeType === 1 && children[0].nodeName === 'DIV') {
+    if (children.length === 1 && children[0].nodeName === 'DIV') {
       const inner = Array.from(children[0].childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
       if (inner.length > 1) children = inner;
     }
 
-    const pages = []; let curHtml = '', curH = 0;
+    const pages = [];
+    let curHtml = '', curH = 0;
 
     for (const child of children) {
       const childHtml = child.outerHTML || child.textContent || '';
       if (!childHtml.trim()) continue;
 
-      let forceBreakBefore = false, forceBreakAfter = false;
       if (child.nodeType === 1) {
         const style = child.getAttribute('style') || '';
-        if (style.includes('page-break-before: always') || style.includes('page-break-before:always') || child.classList.contains('page-break-marker')) forceBreakBefore = true;
-        if (style.includes('page-break-after: always') || style.includes('page-break-after:always')) forceBreakAfter = true;
-      }
-
-      const cleanChildHtml = childHtml.replace(/page-break-marker/g, '');
-
-      if (forceBreakBefore && curHtml.trim()) { pages.push(curHtml); curHtml = ''; curH = 0; }
-
-      m.innerHTML = cleanChildHtml;
-      const cH = m.offsetHeight;
-
-      if (curH + cH <= MAX_H) {
-        curHtml += cleanChildHtml; curH += cH;
-      } else {
-        if (child.nodeName === 'TABLE') {
-          const thead = child.querySelector('thead');
-          const theadHtml = thead ? thead.outerHTML : '';
-          let theadH = 0;
-          if (thead) { m.innerHTML = `<table style="border-collapse:collapse;width:100%">${theadHtml}</table>`; theadH = m.offsetHeight; }
-          const bodyRows = Array.from(child.querySelectorAll('tr')).filter(r => !thead || !thead.contains(r));
-          const tOpen = `<table style="border-collapse:collapse;width:100%">`;
-          
-          let tCurRows = '', tCurH = curH + theadH;
-          for (const row of bodyRows) {
-            const rowHtml = row.outerHTML;
-            m.innerHTML = `<table style="border-collapse:collapse;width:100%"><tbody>${rowHtml}</tbody></table>`;
-            const rH = m.offsetHeight;
-            if (tCurH + rH > MAX_H && tCurRows.length > 0) {
-              pages.push(curHtml + tOpen + theadHtml + '<tbody>' + tCurRows + '</tbody></table>');
-              curHtml = ''; tCurRows = ''; tCurH = theadH;
-            }
-            tCurRows += rowHtml; tCurH += rH;
-          }
-          if (tCurRows.length > 0) { curHtml += tOpen + theadHtml + '<tbody>' + tCurRows + '</tbody></table>'; curH = tCurH; }
-        } else {
-          if (curHtml.trim()) pages.push(curHtml);
-          curHtml = cleanChildHtml; curH = cH;
+        if (style.includes('page-break-before') || child.classList?.contains('page-break-marker')) {
+          if (curHtml.trim()) { pages.push(curHtml); curHtml = ''; curH = 0; }
+          continue;
         }
       }
-      if (forceBreakAfter && curHtml.trim()) { pages.push(curHtml); curHtml = ''; curH = 0; }
+
+      m.innerHTML = childHtml;
+      const cH = m.offsetHeight;
+
+      if (curH + cH <= MAX_H) { curHtml += childHtml; curH += cH; continue; }
+
+      if (child.nodeName === 'TABLE') {
+        const chunks = splitTable(child, m, MAX_H, curH);
+        if (chunks.length > 0) {
+          curHtml += chunks[0]; pages.push(curHtml);
+          for (let t = 1; t < chunks.length - 1; t++) pages.push(chunks[t]);
+          if (chunks.length > 1) { curHtml = chunks[chunks.length - 1]; m.innerHTML = curHtml; curH = m.offsetHeight; }
+          else { curHtml = ''; curH = 0; }
+        }
+        continue;
+      }
+
+      if (curHtml.trim()) pages.push(curHtml);
+      curHtml = childHtml; curH = cH;
     }
+
     if (curHtml.trim()) pages.push(curHtml);
     measureZone.removeChild(m);
     return pages.length > 0 ? pages : [html];
   }
 
-  async function createPdfBlob(htmlStr) {
+  function splitTable(table, measurer, maxH, startH) {
+    const thead = table.querySelector('thead');
+    const theadHtml = thead ? thead.outerHTML : '';
+    let theadH = 0;
+    if (thead) { measurer.innerHTML = '<table style="border-collapse:collapse;width:100%">' + theadHtml + '</table>'; theadH = measurer.offsetHeight; }
+
+    const bodyRows = Array.from(table.querySelectorAll('tr')).filter(r => !thead || !thead.contains(r));
+    const attrs = Array.from(table.attributes).map(a => a.name === 'style' ? 'style="border-collapse:collapse;width:100%;' + a.value + '"' : a.name + '="' + a.value + '"').join(' ');
+    const tOpen = '<table ' + (attrs || 'style="border-collapse:collapse;width:100%"') + '>';
+
+    const pages = []; let curRows = '', curH = startH + theadH;
+    for (const row of bodyRows) {
+      const rowHtml = row.outerHTML;
+      measurer.innerHTML = '<table style="border-collapse:collapse;width:100%"><tbody>' + rowHtml + '</tbody></table>';
+      const rH = measurer.offsetHeight;
+      if (curH + rH > maxH && curRows.length > 0) {
+        pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
+        curRows = ''; curH = theadH;
+      }
+      curRows += rowHtml; curH += rH;
+    }
+    if (curRows.length > 0) pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
+    return pages.length > 0 ? pages : [table.outerHTML];
+  }
+
+  async function htmlToPdfBlob(html) {
     const { jsPDF } = window.jspdf;
-    const PAGE_W = 794, PAGE_H = 1123, MM_W = 210, MM_H = 297;
+    const MM_W = 210, MM_H = 297, PAGE_W = 794, PAGE_H = 1123;
+
     rz.style.width = PAGE_W + 'px'; rz.style.height = 'auto'; rz.style.overflow = 'visible';
-    rz.innerHTML = `<div class="editor-preview">${htmlStr}</div>`;
+    rz.innerHTML = `<div class="editor-preview">${html}</div>`;
     const ep = rz.firstElementChild;
 
-    await resolveImages(ep);
-    await waitImages(ep);
+    await resolveImagesFixed(ep);
+    await waitImages(ep, 4000);
+    await sleep(300);
 
     const pages = paginateHtml(ep.innerHTML, ep);
     rz.style.height = PAGE_H + 'px'; rz.style.overflow = 'hidden';
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
     for (let p = 0; p < pages.length; p++) {
       if (p > 0) pdf.addPage();
       ep.innerHTML = pages[p];
-      const canvas = await html2canvas(rz, { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: PAGE_W, width: PAGE_W, height: PAGE_H, backgroundColor: '#ffffff' });
+      await sleep(80);
+      const canvas = await html2canvas(rz, { scale:2, useCORS:true, allowTaint:true, logging:false, scrollX:0, scrollY:0, windowWidth:PAGE_W, width:PAGE_W, height:PAGE_H, backgroundColor:'#ffffff' });
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, MM_W, MM_H, '', 'FAST');
-      canvas.width = 1; canvas.height = 1; 
+      canvas.width = canvas.height = 1;
     }
-    rz.innerHTML = '';
+    rz.style.height = 'auto'; rz.style.overflow = 'visible'; rz.innerHTML = '';
     return pdf.output('blob');
   }
 
-  async function createDocxBlob(htmlStr) {
-    rz.innerHTML = `<div class="editor-preview">${htmlStr}</div>`;
-    const ep = rz.firstElementChild;
-    
-    await resolveImages(ep);
-    await waitImages(ep);
-
-    const imgs = ep.querySelectorAll('img');
-    imgs.forEach(img => {
-      const w = img.width || img.naturalWidth || 120;
-      const h = img.height || img.naturalHeight || 120;
-      img.setAttribute('width', w);
-      img.setAttribute('height', h);
-      img.style.maxWidth = 'none';
-    });
-
-    const cleanHtml = ep.innerHTML;
-    const content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-      body { font-family: 'Marianne', Arial, sans-serif; font-size: 14px; text-align: justify; line-height: 1.5; }
-      table { border-collapse: collapse; width: 100%; margin: 2rem 0; }
-      th, td { border: 1px solid lightgrey; padding: 0.5rem 1rem; }
-      .page-break-marker { page-break-before: always; }
-    </style></head><body>${cleanHtml}</body></html>`;
-
-    rz.innerHTML = '';
-    return htmlDocx.asBlob(content, { orientation: 'portrait', margins: { top: 1000, right: 1000, bottom: 1000, left: 1000 } });
+  /* Conversion HTML -> DOCX via html-docx-js */
+  async function htmlToDocxBlob(html) {
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8"><style>
+        body { font-family: sans-serif; font-size: 14px; line-height: 1.4; }
+        table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+        table td, table th { border: 1px solid #ccc; padding: 0.4em 0.8em; }
+        img { max-width: 100%; }
+      </style></head>
+      <body>${html}</body></html>`;
+    return window.htmlDocx.asBlob(fullHtml);
   }
 
-  $('dlPdfBtn').addEventListener('click', async () => {
-    if (busy || !currentRecordId) return;
-    setBusy(true, "Creation du PDF...");
+  function setProgress(cur, tot, lbl) {
+    $('pbar').style.width = tot > 0 ? Math.round(cur/tot*100)+'%' : '0%';
+    $('prog-lbl').textContent = lbl;
+    $('prog-cnt').textContent = `${cur} / ${tot}`;
+  }
+  function showResult(cls, msg) {
+    const el = $('result-l'); el.className = cls; el.textContent = msg; el.style.display = 'block';
+  }
+  function setProgressU(lbl) {
+    $('prog-lbl-u').textContent = lbl;
+  }
+  function showResultU(cls, msg) {
+    const el = $('result-u'); el.className = cls; el.textContent = msg; el.style.display = 'block';
+  }
+
+  /* ═══════════════════════════════════════════
+     ONGLET UNITAIRE
+  ═══════════════════════════════════════════ */
+  let uOldModele = null;
+  let uRowId = null;
+
+  $('uLoadBtn').addEventListener('click', async () => {
+    if (!currentRecord) return;
+    const modeleId = parseInt($('uModelSelect').value);
+    if (!modeleId) return showResultU('warn', 'Veuillez choisir un modèle.');
+
+    busy = true;
+    $('uLoadBtn').disabled = true;
+    $('result-u').style.display = 'none';
+    $('prog-area-u').className = 'on';
+    setProgressU('Application du modèle…');
+
+    uRowId = currentRecord.id;
+    const row = allTableRows.find(r => r.id === uRowId);
+    uOldModele = row ? row['Modele'] : null;
+
     try {
-      const row = allTableRows.find(r => r.id === currentRecordId);
-      const blob = await createPdfBlob(a4Page.innerHTML);
-      saveAs(blob, getFileName(row, "pdf"));
-    } catch (e) { alert("Erreur: " + e.message); } finally { setBusy(false); }
+      await setModeleForRows([uRowId], modeleId);
+      setProgressU('Attente du recalcul Grist…');
+      const fresh = await pollUntilReady([uRowId], modeleId);
+      const updatedRow = fresh.find(r => r.id === uRowId);
+      const html = updatedRow ? updatedRow[htmlColKey] : '';
+
+      if (!html?.trim()) throw new Error('HTML vide pour cette ligne.');
+
+      const ec = $('edit-content');
+      ec.innerHTML = html;
+      await resolveImagesFixed(ec);
+      await waitImages(ec, 3000);
+
+      $('u-config').style.display = 'none';
+      $('u-preview-zone').style.display = 'block';
+      $('prog-area-u').className = '';
+    } catch(err) {
+      showResultU('err', 'Erreur : ' + err.message);
+      await restoreOne();
+      busy = false;
+      $('uLoadBtn').disabled = false;
+      $('prog-area-u').className = '';
+    }
   });
 
-  $('dlDocxBtn').addEventListener('click', async () => {
-    if (busy || !currentRecordId) return;
-    setBusy(true, "Creation du DOCX...");
-    try {
-      const row = allTableRows.find(r => r.id === currentRecordId);
-      const blob = await createDocxBlob(a4Page.innerHTML);
-      saveAs(blob, getFileName(row, "docx"));
-    } catch (e) { alert("Erreur: " + e.message); } finally { setBusy(false); }
+  async function restoreOne() {
+    if (uRowId == null) return;
+    try { await grist.docApi.applyUserActions([['UpdateRecord', tableId, uRowId, { Modele: uOldModele ?? 0 }]]); } catch(_) {}
+  }
+
+  $('uBackBtn').addEventListener('click', async () => {
+    await restoreOne();
+    $('u-preview-zone').style.display = 'none';
+    $('u-config').style.display = 'block';
+    $('uLoadBtn').disabled = false;
+    $('result-u').style.display = 'none';
+    busy = false;
+    uRowId = null;
   });
 
-  async function processBatchZip(format) {
+  $('uDownloadPdfBtn').addEventListener('click', async () => {
+    $('uDownloadPdfBtn').disabled = true;
+    $('prog-area-u').className = 'on';
+    setProgressU('Génération du PDF…');
+    try {
+      const html = $('edit-content').innerHTML;
+      const blob = await htmlToPdfBlob(html);
+      const row = allTableRows.find(r => r.id === uRowId) || {};
+      const name = buildName(row, 'uNamePattern', 'Document');
+      saveAs(blob, name + '.pdf');
+      showResultU('ok', 'PDF téléchargé.');
+    } catch(err) {
+      showResultU('err', 'Erreur : ' + err.message);
+    }
+    $('prog-area-u').className = '';
+    $('uDownloadPdfBtn').disabled = false;
+  });
+
+  $('uDownloadDocxBtn').addEventListener('click', async () => {
+    $('uDownloadDocxBtn').disabled = true;
+    $('prog-area-u').className = 'on';
+    setProgressU('Génération du document Word…');
+    try {
+      const html = $('edit-content').innerHTML;
+      const blob = await htmlToDocxBlob(html);
+      const row = allTableRows.find(r => r.id === uRowId) || {};
+      const name = buildName(row, 'uNamePattern', 'Document');
+      saveAs(blob, name + '.docx');
+      showResultU('ok', 'Document Word téléchargé.');
+    } catch(err) {
+      showResultU('err', 'Erreur : ' + err.message);
+    }
+    $('prog-area-u').className = '';
+    $('uDownloadDocxBtn').disabled = false;
+  });
+
+  /* ═══════════════════════════════════════════
+     ONGLET LOT
+  ═══════════════════════════════════════════ */
+  $('cancelBtn').addEventListener('click', () => {
+    if (!busy) return;
+    cancelled = true;
+    $('prog-lbl').textContent = 'Annulation…';
+  });
+
+  async function runBatch(format) {
     if (busy) return;
-    const slice = mappedRecords.slice(rangeStart - 1, rangeEnd);
-    if (!slice.length) return;
+    $('result-l').style.display = 'none';
 
-    setBusy(true, "Preparation du ZIP...");
-    $('prog-area').className = 'on';
-    
+    const modeleId = parseInt($('modelSelect').value);
+    if (!modeleId) return showResult('warn', 'Veuillez choisir un modèle.');
+
+    const start = parseInt($('startRow').value);
+    const end   = parseInt($('endRow').value);
+    if (isNaN(start) || isNaN(end) || start < 1 || end < start) return showResult('err', 'Plage invalide.');
+
+    const slice = mappedRecords.slice(start - 1, end);
+    if (!slice.length) return showResult('warn', 'Aucun enregistrement dans cette plage.');
+    if (!htmlColKey)   return showResult('err', 'Aucune colonne HTML mappée.');
+
+    busy = true; cancelled = false;
+    $('genBtnPdf').disabled = true; $('genBtnDocx').disabled = true;
+    $('cancelBtn').style.display = 'flex';
+    $('prog-area-l').className = 'on';
+
+    const ext = format === 'pdf' ? '.pdf' : '.docx';
+    const rowIds     = slice.map(r => r.id);
+    const oldModeles = rowIds.map(id => { const row = allTableRows.find(r => r.id === id); return row ? row['Modele'] : null; });
+
     try {
-      const zip = new JSZip();
-      const used = new Set();
-      let ok = 0;
+      setProgress(0, slice.length, 'Application du modèle…');
+      await setModeleForRows(rowIds, modeleId);
+
+      setProgress(0, slice.length, 'Attente du recalcul Grist…');
+      const freshRows = await pollUntilReady(rowIds, modeleId);
+
+      const zip = new JSZip(); const used = new Set(); let ok = 0, skip = 0;
 
       for (let i = 0; i < slice.length; i++) {
-        const rowId = slice[i].id;
-        const row = allTableRows.find(r => r.id === rowId);
-        
-        const htmlContent = (rowId === currentRecordId) ? a4Page.innerHTML : (row[htmlColKey] || '');
-        
-        if (!htmlContent || !htmlContent.trim()) {
-          setProgress(i + 1, slice.length, `Ligne ignoree (vide)`);
-          continue;
-        }
+        if (cancelled) { showResult('warn', `Annulé après ${ok} fichiers générés.`); break; }
+        const mapped = slice[i];
+        const updatedRow = freshRows.find(r => r.id === mapped.id) || mapped;
+        const html = updatedRow[htmlColKey];
+        if (!html?.trim()) { skip++; setProgress(i+1, slice.length, `Ligne ignorée (HTML vide)`); continue; }
 
-        let file = getFileName(row, format, true);
-        if (used.has(file)) file = file.replace(`.${format}`, `_id${row.id}.${format}`);
+        const fullRow = allTableRows.find(r => r.id === mapped.id) || mapped;
+        let name = buildName(fullRow, 'namePattern', `Document_${i+1}`);
+        let file = `${name}${ext}`;
+        if (used.has(file)) file = `${name}_id${mapped.id}${ext}`;
         used.add(file);
 
-        setProgress(i, slice.length, `Creation : ${file}`);
-        
-        const blob = (format === 'pdf') ? await createPdfBlob(htmlContent) : await createDocxBlob(htmlContent);
-        if (blob && blob.size > 100) { zip.file(file, blob); ok++; }
-
-        setProgress(i + 1, slice.length, `${ok} fichiers crees...`);
+        setProgress(i, slice.length, `Création : ${file}`);
+        try {
+          const blob = format === 'pdf' ? await htmlToPdfBlob(html) : await htmlToDocxBlob(html);
+          if (blob && blob.size > 200) { zip.file(file, blob); ok++; }
+          else skip++;
+        } catch(e) { skip++; }
+        setProgress(i+1, slice.length, `${ok} fichiers créés…`);
       }
+
+      setProgress(slice.length, slice.length, 'Restauration des données…');
+      await grist.docApi.applyUserActions(rowIds.map((id, i) => ['UpdateRecord', tableId, id, { Modele: oldModeles[i] ?? 0 }]));
 
       if (ok > 0) {
-        setProgress(slice.length, slice.length, 'Assemblage du ZIP...');
-        const zb = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
-        saveAs(zb, `Export_Lot_${format.toUpperCase()}.zip`);
-      } else {
-        alert("Aucun fichier valide genere.");
+        const zb = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:5} });
+        const d = new Date();
+        const prefix = format === 'pdf' ? 'Export_PDF' : 'Export_Word';
+        saveAs(zb, `${prefix}_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.zip`);
+        setProgress(slice.length, slice.length, 'ZIP téléchargé');
+        showResult('ok', `${ok} fichiers générés${skip ? ` (${skip} ignorée(s))` : ''}`);
+      } else if (!cancelled) {
+        showResult('err', 'Aucun fichier valide généré.');
       }
-    } catch (e) {
-      alert("Erreur: " + e.message);
-    } finally {
-      setBusy(false);
+    } catch(err) {
+      showResult('err', `Erreur : ${err.message}`);
+      try { await grist.docApi.applyUserActions(rowIds.map((id, i) => ['UpdateRecord', tableId, id, { Modele: oldModeles[i] ?? 0 }])); } catch(_) {}
     }
+
+    rz.innerHTML = '';
+    busy = false; cancelled = false;
+    $('genBtnPdf').disabled = false; $('genBtnDocx').disabled = false;
+    $('cancelBtn').style.display = 'none';
   }
 
-  $('zipPdfBtn').addEventListener('click', () => processBatchZip('pdf'));
-  $('zipDocxBtn').addEventListener('click', () => processBatchZip('docx'));
+  $('genBtnPdf').addEventListener('click', () => runBatch('pdf'));
+  $('genBtnDocx').addEventListener('click', () => runBatch('docx'));
 
 })();
 </script>
