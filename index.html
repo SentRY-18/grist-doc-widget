@@ -680,10 +680,6 @@
   }
 
   /* Conversion HTML -> DOCX via html-docx-js */
-  /* Convertit du HTML en ODT natif (ZIP OpenDocument)
-     - Marianne spécifiée directement (installée sur les postes)
-     - Images embarquées en base64 dans le ZIP ODT
-     - Tables, gras, italique, souligné supportés */
   async function htmlToOdtBlob(html) {
     const tmp = document.createElement('div');
     tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;visibility:hidden;';
@@ -693,113 +689,122 @@
     await resolveImagesFixed(tmp);
     await waitImages(tmp, 3000);
 
-    // Collecter les images et leur attribuer un nom de fichier dans le ZIP
+    // Collecter les images
     const images = [];
     tmp.querySelectorAll('img').forEach((img, idx) => {
       const src = img.getAttribute('src') || '';
       if (!src.startsWith('data:')) return;
       const mime = src.split(';')[0].replace('data:', '') || 'image/png';
       const ext  = mime.split('/')[1] || 'png';
-      const name = `img${idx}.${ext}`;
-      images.push({ name, src, mime });
-      img.setAttribute('data-odt-name', name);
-
-      // Calculer dimensions pour ODT (en cm, 1px = 0.026458 cm)
-      let w = img.naturalWidth  || 150;
-      let h = img.naturalHeight || 50;
+      const name = 'img' + idx + '.' + ext;
+      let w = img.naturalWidth  || img.width  || 200;
+      let h = img.naturalHeight || img.height || 80;
       const maxWcm = 14;
       const wcm = Math.min(w * 0.026458, maxWcm);
       const hcm = h * 0.026458 * (wcm / (w * 0.026458));
+      images.push({ name, src, mime, wcm: wcm.toFixed(3), hcm: hcm.toFixed(3) });
+      img.setAttribute('data-odt-name', name);
       img.setAttribute('data-odt-w', wcm.toFixed(3));
       img.setAttribute('data-odt-h', hcm.toFixed(3));
     });
 
-    // Convertir le DOM en contenu ODT XML
     function escXml(s) {
-      return String(s)
+      return String(s || '')
         .replace(/&/g,'&amp;').replace(/</g,'&lt;')
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    function childrenOdt(node) {
+      return Array.from(node.childNodes).map(n => nodeToOdt(n)).join('');
+    }
+
     function nodeToOdt(node) {
-      if (node.nodeType === 3) return escXml(node.textContent);
+      if (node.nodeType === 3) {
+        const txt = node.textContent;
+        return txt ? escXml(txt) : '';
+      }
       if (node.nodeType !== 1) return '';
 
       const tag = node.tagName.toLowerCase();
-      let out = '';
 
-      const childrenOdt = () => Array.from(node.childNodes).map(nodeToOdt).join('');
-
-      // Image
       if (tag === 'img') {
         const name = node.getAttribute('data-odt-name');
         const wcm  = node.getAttribute('data-odt-w') || '5';
         const hcm  = node.getAttribute('data-odt-h') || '2';
         if (!name) return '';
-        return `<draw:frame draw:name="${escXml(name)}" text:anchor-type="as-char" svg:width="${wcm}cm" svg:height="${hcm}cm" draw:z-index="0"><draw:image xlink:href="Pictures/${escXml(name)}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>`;
+        return '<draw:frame draw:name="' + escXml(name) + '" text:anchor-type="as-char"' +
+               ' svg:width="' + wcm + 'cm" svg:height="' + hcm + 'cm" draw:z-index="0">' +
+               '<draw:image xlink:href="Pictures/' + escXml(name) + '"' +
+               ' xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>';
       }
 
-      // Paragraphe
+      if (tag === 'br')   return '<text:line-break/>';
+      if (tag === 'hr')   return '</text:p><text:p text:style-name="P_HR"><text:p text:style-name="P_DEFAULT">';
+
+      if (tag === 'strong' || tag === 'b')
+        return '<text:span text:style-name="T_BOLD">' + childrenOdt(node) + '</text:span>';
+      if (tag === 'em' || tag === 'i')
+        return '<text:span text:style-name="T_ITALIC">' + childrenOdt(node) + '</text:span>';
+      if (tag === 'u')
+        return '<text:span text:style-name="T_UNDERLINE">' + childrenOdt(node) + '</text:span>';
+      if (tag === 'span')
+        return childrenOdt(node);
+
       if (tag === 'p' || tag === 'div') {
-        const align = node.style.textAlign || '';
-        const style = align === 'center' ? 'P_CENTER' : align === 'right' ? 'P_RIGHT' : 'P_DEFAULT';
-        return `<text:p text:style-name="${style}">${childrenOdt()}</text:p>`;
+        const align = (node.style && node.style.textAlign) || '';
+        const sty = align === 'center' ? 'P_CENTER' : align === 'right' ? 'P_RIGHT' : 'P_DEFAULT';
+        return '<text:p text:style-name="' + sty + '">' + childrenOdt(node) + '</text:p>';
       }
 
-      // Titres
-      if (tag === 'h1') return `<text:h text:style-name="H1" text:outline-level="1">${childrenOdt()}</text:h>`;
-      if (tag === 'h2') return `<text:h text:style-name="H2" text:outline-level="2">${childrenOdt()}</text:h>`;
-      if (tag === 'h3') return `<text:h text:style-name="H3" text:outline-level="3">${childrenOdt()}</text:h>`;
+      if (tag === 'h1') return '<text:h text:style-name="H1" text:outline-level="1">' + childrenOdt(node) + '</text:h>';
+      if (tag === 'h2') return '<text:h text:style-name="H2" text:outline-level="2">' + childrenOdt(node) + '</text:h>';
+      if (tag === 'h3') return '<text:h text:style-name="H3" text:outline-level="3">' + childrenOdt(node) + '</text:h>';
 
-      // Formatage inline
-      if (tag === 'strong' || tag === 'b') return `<text:span text:style-name="T_BOLD">${childrenOdt()}</text:span>`;
-      if (tag === 'em'     || tag === 'i') return `<text:span text:style-name="T_ITALIC">${childrenOdt()}</text:span>`;
-      if (tag === 'u')                     return `<text:span text:style-name="T_UNDERLINE">${childrenOdt()}</text:span>`;
-      if (tag === 'br')                    return '<text:line-break/>';
-      if (tag === 'hr')                    return '<text:p text:style-name="P_HR"/>';
-
-      // Listes
       if (tag === 'ul' || tag === 'ol') {
-        const style = tag === 'ul' ? 'L_BULLET' : 'L_NUMBER';
-        const items = Array.from(node.querySelectorAll(':scope > li')).map(li =>
-          `<text:list-item><text:p text:style-name="P_LI">${Array.from(li.childNodes).map(nodeToOdt).join('')}</text:p></text:list-item>`
-        ).join('');
-        return `<text:list text:style-name="${style}">${items}</text:list>`;
+        const lsty = tag === 'ul' ? 'L_BULLET' : 'L_NUMBER';
+        const items = Array.from(node.children)
+          .filter(c => c.tagName.toLowerCase() === 'li')
+          .map(li => '<text:list-item><text:p text:style-name="P_LI">' + childrenOdt(li) + '</text:p></text:list-item>')
+          .join('');
+        return '<text:list text:style-name="' + lsty + '">' + items + '</text:list>';
       }
-      if (tag === 'li') return '';
+      if (tag === 'li') return childrenOdt(node);
 
-      // Tableaux
       if (tag === 'table') {
         const rows = Array.from(node.querySelectorAll('tr'));
-        // Calculer nombre de colonnes
         const maxCols = rows.reduce((m, r) => Math.max(m, r.querySelectorAll('td,th').length), 0);
-        const colW = maxCols > 0 ? (14 / maxCols).toFixed(3) : '4';
-        const cols = Array.from({length: maxCols}, (_, i) =>
-          `<table:table-column table:style-name="TC_${i}" table:number-columns-repeated="1"/>`
-        ).join('');
+        if (maxCols === 0) return '';
+        const colDecl = '<table:table-column table:number-columns-repeated="' + maxCols + '"/>';
         const trows = rows.map(row => {
           const cells = Array.from(row.querySelectorAll('td,th')).map(cell => {
             const isH = cell.tagName.toLowerCase() === 'th';
-            const cellContent = Array.from(cell.childNodes).map(nodeToOdt).join('') || '<text:p text:style-name="P_DEFAULT"/>';
-            const needsWrap = !cellContent.startsWith('<text:') && !cellContent.startsWith('<draw:');
-            return `<table:table-cell table:style-name="${isH ? 'TH_CELL' : 'TD_CELL'}"><text:p text:style-name="${isH ? 'P_TH' : 'P_TD'}">${needsWrap ? escXml(cellContent) : cellContent}</text:p></table:table-cell>`;
+            const inner = childrenOdt(cell);
+            const cellPara = '<text:p text:style-name="' + (isH ? 'P_TH' : 'P_TD') + '">' + inner + '</text:p>';
+            return '<table:table-cell table:style-name="' + (isH ? 'TH_CELL' : 'TD_CELL') + '">' + cellPara + '</table:table-cell>';
           }).join('');
-          return `<table:table-row>${cells}</table:table-row>`;
+          return '<table:table-row>' + cells + '</table:table-row>';
         }).join('');
-        return `<table:table table:name="Table1" table:style-name="TABLE1">${cols}${trows}</table:table>`;
+        return '<table:table table:style-name="TABLE1">' + colDecl + trows + '</table:table>';
       }
-      if (tag === 'thead' || tag === 'tbody' || tag === 'tfoot' || tag === 'tr' || tag === 'td' || tag === 'th') {
-        return childrenOdt();
-      }
+      if (tag === 'thead' || tag === 'tbody' || tag === 'tfoot') return childrenOdt(node);
+      if (tag === 'tr' || tag === 'td' || tag === 'th') return childrenOdt(node);
 
-      // Span générique
-      if (tag === 'span') return childrenOdt();
-
-      // Tout le reste : juste les enfants
-      return childrenOdt();
+      // Tout le reste
+      return childrenOdt(node);
     }
 
-    const bodyOdt = Array.from(tmp.childNodes).map(nodeToOdt).join('');
+    // Envelopper le contenu dans des paragraphes si nécessaire
+    let bodyOdt = Array.from(tmp.childNodes).map(n => {
+      const odt = nodeToOdt(n);
+      // Si le nœud n'est pas déjà un élément block ODT, l'envelopper dans un paragraphe
+      if (!odt.startsWith('<text:') && !odt.startsWith('<table:') && !odt.startsWith('<draw:')) {
+        return odt ? '<text:p text:style-name="P_DEFAULT">' + odt + '</text:p>' : '';
+      }
+      return odt;
+    }).join('');
+
+    if (!bodyOdt.trim()) bodyOdt = '<text:p text:style-name="P_DEFAULT"/>';
+
     document.body.removeChild(tmp);
 
     // ── Fichiers ODT ──────────────────────────────────────
