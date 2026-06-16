@@ -8,7 +8,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
   <style>
     @font-face {
       font-family: 'Marianne';
@@ -262,7 +261,7 @@
 
       <div class="btn-row">
         <button id="uDownloadPdfBtn" class="btn btn-primary">Télécharger PDF</button>
-        <button id="uDownloadDocxBtn" class="btn btn-secondary">Télécharger Word</button>
+        <button id="uDownloadDocxBtn" class="btn btn-secondary">Télécharger ODT</button>
       </div>
       <div class="btn-row">
         <button id="uBackBtn" class="btn btn-secondary btn-full">Retour</button>
@@ -323,7 +322,7 @@
 
     <div class="btn-row">
       <button id="genBtnPdf" class="btn btn-primary" disabled>ZIP de PDF</button>
-      <button id="genBtnDocx" class="btn btn-secondary" disabled>ZIP de Word</button>
+      <button id="genBtnDocx" class="btn btn-secondary" disabled>ZIP de ODT</button>
     </div>
     <div class="btn-row">
       <button id="cancelBtn" class="btn btn-danger btn-full" style="display:none">Annuler</button>
@@ -681,37 +680,251 @@
   }
 
   /* Conversion HTML -> DOCX via html-docx-js */
-  async function htmlToDocxBlob(html) {
-    // Résoudre toutes les images en base64 pour que Word les embarque
+  /* Convertit du HTML en ODT natif (ZIP OpenDocument)
+     - Marianne spécifiée directement (installée sur les postes)
+     - Images embarquées en base64 dans le ZIP ODT
+     - Tables, gras, italique, souligné supportés */
+  async function htmlToOdtBlob(html) {
     const tmp = document.createElement('div');
+    tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;visibility:hidden;';
     tmp.innerHTML = html;
+    document.body.appendChild(tmp);
+
     await resolveImagesFixed(tmp);
     await waitImages(tmp, 3000);
 
-    // Contraindre les dimensions des images pour éviter l'étirement
-    tmp.querySelectorAll('img').forEach(img => {
-      img.removeAttribute('width');
-      img.removeAttribute('height');
-      img.style.width = 'auto';
-      img.style.height = 'auto';
-      img.style.maxWidth = '14cm';
+    // Collecter les images et leur attribuer un nom de fichier dans le ZIP
+    const images = [];
+    tmp.querySelectorAll('img').forEach((img, idx) => {
+      const src = img.getAttribute('src') || '';
+      if (!src.startsWith('data:')) return;
+      const mime = src.split(';')[0].replace('data:', '') || 'image/png';
+      const ext  = mime.split('/')[1] || 'png';
+      const name = `img${idx}.${ext}`;
+      images.push({ name, src, mime });
+      img.setAttribute('data-odt-name', name);
+
+      // Calculer dimensions pour ODT (en cm, 1px = 0.026458 cm)
+      let w = img.naturalWidth  || 150;
+      let h = img.naturalHeight || 50;
+      const maxWcm = 14;
+      const wcm = Math.min(w * 0.026458, maxWcm);
+      const hcm = h * 0.026458 * (wcm / (w * 0.026458));
+      img.setAttribute('data-odt-w', wcm.toFixed(3));
+      img.setAttribute('data-odt-h', hcm.toFixed(3));
     });
 
-    const resolvedHtml = tmp.innerHTML;
-    const fullHtml = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><style>
-  body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; margin: 2cm 2cm 2cm 2cm; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-  table td, table th { border: 1px solid #ccc; padding: 0.4em 0.8em; vertical-align: top; }
-  img { max-width: 14cm; height: auto; display: block; }
-  p { margin: 0.3em 0; }
-  h1 { font-size: 16pt; } h2 { font-size: 14pt; } h3 { font-size: 12pt; }
-</style></head>
-<body>${resolvedHtml}</body></html>`;
-    return window.htmlDocx.asBlob(fullHtml, { orientation: 'portrait', margins: { top: 1134, right: 1134, bottom: 1134, left: 1134 } });
+    // Convertir le DOM en contenu ODT XML
+    function escXml(s) {
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function nodeToOdt(node) {
+      if (node.nodeType === 3) return escXml(node.textContent);
+      if (node.nodeType !== 1) return '';
+
+      const tag = node.tagName.toLowerCase();
+      let out = '';
+
+      const childrenOdt = () => Array.from(node.childNodes).map(nodeToOdt).join('');
+
+      // Image
+      if (tag === 'img') {
+        const name = node.getAttribute('data-odt-name');
+        const wcm  = node.getAttribute('data-odt-w') || '5';
+        const hcm  = node.getAttribute('data-odt-h') || '2';
+        if (!name) return '';
+        return `<draw:frame draw:name="${escXml(name)}" text:anchor-type="as-char" svg:width="${wcm}cm" svg:height="${hcm}cm" draw:z-index="0"><draw:image xlink:href="Pictures/${escXml(name)}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>`;
+      }
+
+      // Paragraphe
+      if (tag === 'p' || tag === 'div') {
+        const align = node.style.textAlign || '';
+        const style = align === 'center' ? 'P_CENTER' : align === 'right' ? 'P_RIGHT' : 'P_DEFAULT';
+        return `<text:p text:style-name="${style}">${childrenOdt()}</text:p>`;
+      }
+
+      // Titres
+      if (tag === 'h1') return `<text:h text:style-name="H1" text:outline-level="1">${childrenOdt()}</text:h>`;
+      if (tag === 'h2') return `<text:h text:style-name="H2" text:outline-level="2">${childrenOdt()}</text:h>`;
+      if (tag === 'h3') return `<text:h text:style-name="H3" text:outline-level="3">${childrenOdt()}</text:h>`;
+
+      // Formatage inline
+      if (tag === 'strong' || tag === 'b') return `<text:span text:style-name="T_BOLD">${childrenOdt()}</text:span>`;
+      if (tag === 'em'     || tag === 'i') return `<text:span text:style-name="T_ITALIC">${childrenOdt()}</text:span>`;
+      if (tag === 'u')                     return `<text:span text:style-name="T_UNDERLINE">${childrenOdt()}</text:span>`;
+      if (tag === 'br')                    return '<text:line-break/>';
+      if (tag === 'hr')                    return '<text:p text:style-name="P_HR"/>';
+
+      // Listes
+      if (tag === 'ul' || tag === 'ol') {
+        const style = tag === 'ul' ? 'L_BULLET' : 'L_NUMBER';
+        const items = Array.from(node.querySelectorAll(':scope > li')).map(li =>
+          `<text:list-item><text:p text:style-name="P_LI">${Array.from(li.childNodes).map(nodeToOdt).join('')}</text:p></text:list-item>`
+        ).join('');
+        return `<text:list text:style-name="${style}">${items}</text:list>`;
+      }
+      if (tag === 'li') return '';
+
+      // Tableaux
+      if (tag === 'table') {
+        const rows = Array.from(node.querySelectorAll('tr'));
+        // Calculer nombre de colonnes
+        const maxCols = rows.reduce((m, r) => Math.max(m, r.querySelectorAll('td,th').length), 0);
+        const colW = maxCols > 0 ? (14 / maxCols).toFixed(3) : '4';
+        const cols = Array.from({length: maxCols}, (_, i) =>
+          `<table:table-column table:style-name="TC_${i}" table:number-columns-repeated="1"/>`
+        ).join('');
+        const trows = rows.map(row => {
+          const cells = Array.from(row.querySelectorAll('td,th')).map(cell => {
+            const isH = cell.tagName.toLowerCase() === 'th';
+            const cellContent = Array.from(cell.childNodes).map(nodeToOdt).join('') || '<text:p text:style-name="P_DEFAULT"/>';
+            const needsWrap = !cellContent.startsWith('<text:') && !cellContent.startsWith('<draw:');
+            return `<table:table-cell table:style-name="${isH ? 'TH_CELL' : 'TD_CELL'}"><text:p text:style-name="${isH ? 'P_TH' : 'P_TD'}">${needsWrap ? escXml(cellContent) : cellContent}</text:p></table:table-cell>`;
+          }).join('');
+          return `<table:table-row>${cells}</table:table-row>`;
+        }).join('');
+        return `<table:table table:name="Table1" table:style-name="TABLE1">${cols}${trows}</table:table>`;
+      }
+      if (tag === 'thead' || tag === 'tbody' || tag === 'tfoot' || tag === 'tr' || tag === 'td' || tag === 'th') {
+        return childrenOdt();
+      }
+
+      // Span générique
+      if (tag === 'span') return childrenOdt();
+
+      // Tout le reste : juste les enfants
+      return childrenOdt();
+    }
+
+    const bodyOdt = Array.from(tmp.childNodes).map(nodeToOdt).join('');
+    document.body.removeChild(tmp);
+
+    // ── Fichiers ODT ──────────────────────────────────────
+    const FONT = 'Marianne';
+
+    const contentXml = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  office:version="1.2">
+<office:font-face-decls>
+  <style:font-face style:name="${FONT}" svg:font-family="${FONT}"/>
+</office:font-face-decls>
+<office:automatic-styles>
+  <style:style style:name="P_DEFAULT" style:family="paragraph">
+    <style:paragraph-properties fo:margin-top="0.1cm" fo:margin-bottom="0.1cm"/>
+    <style:text-properties style:font-name="${FONT}" fo:font-size="11pt"/>
+  </style:style>
+  <style:style style:name="P_CENTER" style:family="paragraph">
+    <style:paragraph-properties fo:text-align="center" fo:margin-top="0.1cm" fo:margin-bottom="0.1cm"/>
+    <style:text-properties style:font-name="${FONT}" fo:font-size="11pt"/>
+  </style:style>
+  <style:style style:name="P_RIGHT" style:family="paragraph">
+    <style:paragraph-properties fo:text-align="end" fo:margin-top="0.1cm" fo:margin-bottom="0.1cm"/>
+    <style:text-properties style:font-name="${FONT}" fo:font-size="11pt"/>
+  </style:style>
+  <style:style style:name="P_LI" style:family="paragraph">
+    <style:text-properties style:font-name="${FONT}" fo:font-size="11pt"/>
+  </style:style>
+  <style:style style:name="P_TD" style:family="paragraph">
+    <style:text-properties style:font-name="${FONT}" fo:font-size="10pt"/>
+  </style:style>
+  <style:style style:name="P_TH" style:family="paragraph">
+    <style:paragraph-properties fo:text-align="center"/>
+    <style:text-properties style:font-name="${FONT}" fo:font-size="10pt" fo:font-weight="bold"/>
+  </style:style>
+  <style:style style:name="P_HR" style:family="paragraph">
+    <style:paragraph-properties fo:border-bottom="0.05pt solid #888888" fo:padding-bottom="0.1cm" fo:margin-top="0.3cm" fo:margin-bottom="0.3cm"/>
+  </style:style>
+  <style:style style:name="H1" style:family="paragraph">
+    <style:text-properties style:font-name="${FONT}" fo:font-size="18pt" fo:font-weight="bold"/>
+  </style:style>
+  <style:style style:name="H2" style:family="paragraph">
+    <style:text-properties style:font-name="${FONT}" fo:font-size="15pt" fo:font-weight="bold"/>
+  </style:style>
+  <style:style style:name="H3" style:family="paragraph">
+    <style:text-properties style:font-name="${FONT}" fo:font-size="13pt" fo:font-weight="bold"/>
+  </style:style>
+  <style:style style:name="T_BOLD" style:family="text">
+    <style:text-properties fo:font-weight="bold"/>
+  </style:style>
+  <style:style style:name="T_ITALIC" style:family="text">
+    <style:text-properties fo:font-style="italic"/>
+  </style:style>
+  <style:style style:name="T_UNDERLINE" style:family="text">
+    <style:text-properties style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"/>
+  </style:style>
+  <style:style style:name="TABLE1" style:family="table">
+    <style:table-properties fo:margin-top="0.3cm" fo:margin-bottom="0.3cm" style:width="14cm"/>
+  </style:style>
+  <style:style style:name="TD_CELL" style:family="table-cell">
+    <style:table-cell-properties fo:border="0.05pt solid #999999" fo:padding="0.15cm"/>
+  </style:style>
+  <style:style style:name="TH_CELL" style:family="table-cell">
+    <style:table-cell-properties fo:border="0.05pt solid #999999" fo:padding="0.15cm" fo:background-color="#f0f0f0"/>
+  </style:style>
+</office:automatic-styles>
+<office:body>
+<office:text>
+${bodyOdt}
+</office:text>
+</office:body>
+</office:document-content>`;
+
+    const stylesXml = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  office:version="1.2">
+<office:styles>
+  <style:default-style style:family="paragraph">
+    <style:text-properties style:font-name="${FONT}" fo:font-size="11pt" fo:language="fr" fo:country="FR"/>
+  </style:default-style>
+</office:styles>
+<office:automatic-styles>
+  <style:page-layout style:name="pm1">
+    <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm"
+      fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/>
+  </style:page-layout>
+</office:automatic-styles>
+<office:master-styles>
+  <style:master-page style:name="Standard" style:page-layout-name="pm1"/>
+</office:master-styles>
+</office:document-styles>`;
+
+    const manifestXml = `<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">
+  <manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>
+  <manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
+  <manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>
+${images.map(img => `  <manifest:file-entry manifest:full-path="Pictures/${img.name}" manifest:media-type="${img.mime}"/>`).join('\n')}
+</manifest:manifest>`;
+
+    const mimetypeStr = 'application/vnd.oasis.opendocument.text';
+
+    const zip = new JSZip();
+    zip.file('mimetype', mimetypeStr, { compression: 'STORE' });
+    zip.file('content.xml', contentXml);
+    zip.file('styles.xml', stylesXml);
+    zip.file('META-INF/manifest.xml', manifestXml);
+
+    // Ajouter les images
+    for (const img of images) {
+      const base64 = img.src.split(',')[1] || '';
+      zip.file(`Pictures/${img.name}`, base64, { base64: true });
+    }
+
+    return zip.generateAsync({ type: 'blob', mimeType: mimetypeStr });
   }
 
   function setProgress(cur, tot, lbl) {
@@ -812,14 +1025,14 @@
   $('uDownloadDocxBtn').addEventListener('click', async () => {
     $('uDownloadDocxBtn').disabled = true;
     $('prog-area-u').className = 'on';
-    setProgressU('Génération du document Word…');
+    setProgressU('Génération du document ODT…');
     try {
       const html = $('edit-content').innerHTML;
-      const blob = await htmlToDocxBlob(html);
+      const blob = await htmlToOdtBlob(html);
       const row = allTableRows.find(r => r.id === uRowId) || {};
       const name = buildName(row, 'uNamePattern', 'Document');
-      saveAs(blob, name + '.docx');
-      showResultU('ok', 'Document Word téléchargé.');
+      saveAs(blob, name + '.odt');
+      showResultU('ok', 'Document ODT téléchargé.');
     } catch(err) {
       showResultU('err', 'Erreur : ' + err.message);
     }
@@ -884,7 +1097,7 @@
 
         setProgress(i, slice.length, `Création : ${file}`);
         try {
-          const blob = format === 'pdf' ? await htmlToPdfBlob(html) : await htmlToDocxBlob(html);
+          const blob = format === 'pdf' ? await htmlToPdfBlob(html) : await htmlToOdtBlob(html);
           if (blob && blob.size > 200) { zip.file(file, blob); ok++; }
           else skip++;
         } catch(e) { skip++; }
@@ -897,7 +1110,7 @@
       if (ok > 0) {
         const zb = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:5} });
         const d = new Date();
-        const prefix = format === 'pdf' ? 'Export_PDF' : 'Export_Word';
+        const prefix = format === 'pdf' ? 'Export_PDF' : 'Export_ODT';
         saveAs(zb, `${prefix}_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.zip`);
         setProgress(slice.length, slice.length, 'ZIP téléchargé');
         showResult('ok', `${ok} fichiers générés${skip ? ` (${skip} ignorée(s))` : ''}`);
