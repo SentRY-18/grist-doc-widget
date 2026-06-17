@@ -793,12 +793,17 @@
       return childrenOdt(node);
     }
 
-    // Envelopper le contenu dans des paragraphes si nécessaire
-    let bodyOdt = Array.from(tmp.childNodes).map(n => {
+    // Récupérer les nœuds enfants directs, en descendant dans un div unique si besoin
+    let topNodes = Array.from(tmp.childNodes);
+    if (topNodes.length === 1 && topNodes[0].nodeType === 1 && topNodes[0].nodeName === 'DIV') {
+      topNodes = Array.from(topNodes[0].childNodes);
+    }
+
+    let bodyOdt = topNodes.map(n => {
       const odt = nodeToOdt(n);
-      // Si le nœud n'est pas déjà un élément block ODT, l'envelopper dans un paragraphe
+      // Envelopper les nœuds texte nus dans un paragraphe
       if (!odt.startsWith('<text:') && !odt.startsWith('<table:') && !odt.startsWith('<draw:')) {
-        return odt ? '<text:p text:style-name="P_DEFAULT">' + odt + '</text:p>' : '';
+        return odt.trim() ? '<text:p text:style-name="P_DEFAULT">' + odt + '</text:p>' : '';
       }
       return odt;
     }).join('');
