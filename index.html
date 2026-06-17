@@ -7,8 +7,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
   <style>
     @font-face {
       font-family: 'Marianne';
@@ -652,27 +652,6 @@
     return pages.length > 0 ? pages : [table.outerHTML];
   }
 
-  async function htmlToDocxBlob(html) {
-    const tmp = document.createElement('div');
-    tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;visibility:hidden;';
-    tmp.innerHTML = html;
-    document.body.appendChild(tmp);
-    await resolveImagesFixed(tmp);
-    await waitImages(tmp, 3000);
-    tmp.querySelectorAll('img').forEach(img => {
-      let w = img.naturalWidth || img.width || 0;
-      let h = img.naturalHeight || img.height || 0;
-      const MAX_W = 529;
-      if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; }
-      if (w > 0 && h > 0) { img.setAttribute('width', w); img.setAttribute('height', h); img.style.width = w+'px'; img.style.height = h+'px'; }
-      else { img.style.maxWidth = '14cm'; img.style.height = 'auto'; }
-    });
-    const resolvedHtml = tmp.innerHTML;
-    document.body.removeChild(tmp);
-    const fullHtml = '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4;}table{border-collapse:collapse;width:100%;margin:.8em 0;}td,th{border:1px solid #999;padding:.35em .7em;vertical-align:top;}img{display:block;}p{margin:.3em 0;}h1{font-size:16pt;}h2{font-size:14pt;}h3{font-size:12pt;}</style></head><body>' + resolvedHtml + '</body></html>';
-    return window.htmlDocx.asBlob(fullHtml, { orientation: 'portrait', margins: { top: 1080, right: 1080, bottom: 1080, left: 1080 } });
-  }
-
   async function htmlToPdfBlob(html) {
     const { jsPDF } = window.jspdf;
     const MM_W = 210, MM_H = 297, PAGE_W = 794, PAGE_H = 1123;
@@ -703,69 +682,99 @@
 
   /* Conversion HTML -> DOCX via html-docx-js */
   async function htmlToDocxBlob(html) {
+    // Résoudre toutes les images en base64 pour que Word les embarque
     const tmp = document.createElement('div');
-    tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;visibility:hidden;';
     tmp.innerHTML = html;
-    document.body.appendChild(tmp);
-
     await resolveImagesFixed(tmp);
     await waitImages(tmp, 3000);
 
-    // Fixer les dimensions des images
+    // Contraindre les dimensions des images pour éviter l'étirement
     tmp.querySelectorAll('img').forEach(img => {
-      let w = img.naturalWidth || img.width || 0;
-      let h = img.naturalHeight || img.height || 0;
-      const MAX_W = 529; // 14cm @ 96dpi
-      if (w > MAX_W) { h = Math.round(h * MAX_W / w); w = MAX_W; }
-      if (w > 0 && h > 0) {
-        img.setAttribute('width', w);
-        img.setAttribute('height', h);
-        img.style.width = w + 'px';
-        img.style.height = h + 'px';
-      } else {
-        img.style.maxWidth = '14cm';
-        img.style.height = 'auto';
-      }
+      img.removeAttribute('width');
+      img.removeAttribute('height');
+      img.style.width = 'auto';
+      img.style.height = 'auto';
+      img.style.maxWidth = '14cm';
     });
 
     const resolvedHtml = tmp.innerHTML;
-    document.body.removeChild(tmp);
-
-    const fullHtml = '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4;}table{border-collapse:collapse;width:100%;margin:.8em 0;}td,th{border:1px solid #999;padding:.35em .7em;vertical-align:top;}img{display:block;}p{margin:.3em 0;}h1{font-size:16pt;}h2{font-size:14pt;}h3{font-size:12pt;}</style></head><body>' + resolvedHtml + '</body></html>';
-
-    return window.htmlDocx.asBlob(fullHtml, { orientation: 'portrait', margins: { top: 1080, right: 1080, bottom: 1080, left: 1080 } });
+    const fullHtml = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><style>
+  body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; margin: 2cm 2cm 2cm 2cm; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  table td, table th { border: 1px solid #ccc; padding: 0.4em 0.8em; vertical-align: top; }
+  img { max-width: 14cm; height: auto; display: block; }
+  p { margin: 0.3em 0; }
+  h1 { font-size: 16pt; } h2 { font-size: 14pt; } h3 { font-size: 12pt; }
+</style></head>
+<body>${resolvedHtml}</body></html>`;
+    return window.htmlDocx.asBlob(fullHtml, { orientation: 'portrait', margins: { top: 1134, right: 1134, bottom: 1134, left: 1134 } });
   }
 
+  function setProgress(cur, tot, lbl) {
+    $('pbar').style.width = tot > 0 ? Math.round(cur/tot*100)+'%' : '0%';
+    $('prog-lbl').textContent = lbl;
+    $('prog-cnt').textContent = `${cur} / ${tot}`;
+  }
+  function showResult(cls, msg) {
+    const el = $('result-l'); el.className = cls; el.textContent = msg; el.style.display = 'block';
+  }
+  function setProgressU(lbl) {
+    $('prog-lbl-u').textContent = lbl;
+  }
+  function showResultU(cls, msg) {
+    const el = $('result-u'); el.className = cls; el.textContent = msg; el.style.display = 'block';
+  }
 
-  async function htmlToPdfBlob(html) {
-    const { jsPDF } = window.jspdf;
-    const MM_W = 210, MM_H = 297, PAGE_W = 794, PAGE_H = 1123;
+  /* ═══════════════════════════════════════════
+     ONGLET UNITAIRE
+  ═══════════════════════════════════════════ */
+  let uOldModele = null;
+  let uRowId = null;
 
-    rz.style.width = PAGE_W + 'px'; rz.style.height = 'auto'; rz.style.overflow = 'visible';
-    rz.innerHTML = `<div class="editor-preview">${html}</div>`;
-    const ep = rz.firstElementChild;
+  $('uLoadBtn').addEventListener('click', async () => {
+    if (!currentRecord) return;
+    const modeleId = parseInt($('uModelSelect').value);
+    if (!modeleId) return showResultU('warn', 'Veuillez choisir un modèle.');
 
-    await resolveImagesFixed(ep);
-    await waitImages(ep, 4000);
-    await sleep(500); // délai pour charger la police Marianne
+    busy = true;
+    $('uLoadBtn').disabled = true;
+    $('result-u').style.display = 'none';
+    $('prog-area-u').className = 'on';
+    setProgressU('Application du modèle…');
 
-    const pages = paginateHtml(ep.innerHTML, ep);
-    rz.style.height = PAGE_H + 'px'; rz.style.overflow = 'hidden';
+    uRowId = currentRecord.id;
+    const row = allTableRows.find(r => r.id === uRowId);
+    uOldModele = row ? row['Modele'] : null;
 
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-    for (let p = 0; p < pages.length; p++) {
-      if (p > 0) pdf.addPage();
-      ep.innerHTML = pages[p];
-      await sleep(80);
-      const canvas = await html2canvas(rz, { scale:2, useCORS:true, allowTaint:true, logging:false, scrollX:0, scrollY:0, windowWidth:PAGE_W, width:PAGE_W, height:PAGE_H, backgroundColor:'#ffffff' });
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, MM_W, MM_H, '', 'FAST');
-      canvas.width = canvas.height = 1;
+    try {
+      await setModeleForRows([uRowId], modeleId);
+      setProgressU('Attente du recalcul Grist…');
+      const fresh = await pollUntilReady([uRowId], modeleId);
+      const updatedRow = fresh.find(r => r.id === uRowId);
+      const html = updatedRow ? updatedRow[htmlColKey] : '';
+
+      if (!html?.trim()) throw new Error('HTML vide pour cette ligne.');
+
+      const ec = $('edit-content');
+      ec.innerHTML = html;
+      await resolveImagesFixed(ec);
+      await waitImages(ec, 3000);
+
+      $('u-config').style.display = 'none';
+      $('u-preview-zone').style.display = 'block';
+      $('prog-area-u').className = '';
+    } catch(err) {
+      showResultU('err', 'Erreur : ' + err.message);
+      await restoreOne();
+      busy = false;
+      $('uLoadBtn').disabled = false;
+      $('prog-area-u').className = '';
     }
-    rz.style.height = 'auto'; rz.style.overflow = 'visible'; rz.innerHTML = '';
-    return pdf.output('blob');
-  }
-
-  /* Conversion HTML -> DOCX via html-docx-js */
+  });
 
   async function restoreOne() {
     if (uRowId == null) return;
