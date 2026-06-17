@@ -10,26 +10,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
   <style>
-    @font-face {
-      font-family: 'Marianne';
-      src: url('https://cdn.jsdelivr.net/npm/@gouvfr/dsfr/dist/fonts/Marianne-Regular.woff2') format('woff2');
-      font-weight: 400; font-style: normal; font-display: block;
-    }
-    @font-face {
-      font-family: 'Marianne';
-      src: url('https://cdn.jsdelivr.net/npm/@gouvfr/dsfr/dist/fonts/Marianne-Bold.woff2') format('woff2');
-      font-weight: 700; font-style: normal; font-display: block;
-    }
-    @font-face {
-      font-family: 'Marianne';
-      src: url('https://cdn.jsdelivr.net/npm/@gouvfr/dsfr/dist/fonts/Marianne-Italic.woff2') format('woff2');
-      font-weight: 400; font-style: italic; font-display: block;
-    }
-    @font-face {
-      font-family: 'Marianne';
-      src: url('https://cdn.jsdelivr.net/npm/@gouvfr/dsfr/dist/fonts/Marianne-BoldItalic.woff2') format('woff2');
-      font-weight: 700; font-style: italic; font-display: block;
-    }
+    @font-face { font-family: 'Marianne'; src: url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; }
+    @font-face { font-family: 'Marianne'; src: url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Italic.woff2') format('woff2'); font-weight: 400; font-style: italic; }
+    @font-face { font-family: 'Marianne'; src: url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; }
+    @font-face { font-family: 'Marianne'; src: url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-BoldItalic.woff2') format('woff2'); font-weight: 700; font-style: italic; }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       background: #f0f2f7 !important;
@@ -137,7 +122,6 @@
     .err  { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
     .warn { background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
 
-    /* Aperçu éditable */
     #preview-wrap {
       border: 2px solid #e2e5ed; border-radius: 6px;
       overflow: hidden; margin-bottom: 12px;
@@ -158,13 +142,14 @@
 
     #edit-content {
       padding: 10mm 15mm; min-height: 200px; outline: none;
-      font-family: 'Marianne', sans-serif; font-size: 14px; line-height: 1.4;
-      color: black; background: white;
+      font-family: sans-serif; font-size: 14px; line-height: 1.4;
+      color: black; background: white; text-align: justify;
     }
-    #edit-content table { margin:1rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; width:100%; }
+    #edit-content table { margin:1rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; width:100%; border-collapse:collapse; }
     #edit-content table th, #edit-content table td { border:1px solid lightgrey; padding:0.4rem 0.8rem; border-right:none; border-bottom:none; }
     #edit-content img { max-width:100%; height:auto; }
     #edit-content p { margin: 0.4em 0; }
+    #edit-content u { text-decoration: none; border-bottom: 1.5px solid currentColor; padding-bottom: 3px; }
 
     #render-zone {
       position: fixed; top: 0; left: -9999px;
@@ -172,7 +157,8 @@
       pointer-events: none; z-index: -1;
     }
     #render-zone .editor-preview {
-      font-family: 'Marianne', sans-serif; font-size: 14px; line-height: 1.4;
+      font-family: 'Marianne', Arial, sans-serif !important;
+      font-size: 14px; line-height: 1.4; text-align: justify;
       color: black; background: white; padding: 10mm 15mm; width: 794px;
     }
     #render-zone .editor-preview code { background-color:#dfe9ff; padding:0 4px; border-radius:4px; color:black; }
@@ -180,7 +166,7 @@
     #render-zone .editor-preview pre { background-color:#eef3ff; padding:8px; border-radius:4px; }
     #render-zone .editor-preview pre code { background-color:unset; padding:unset; border-radius:unset; }
     #render-zone .editor-preview hr { margin-top:2rem; margin-bottom:2rem; border:none; border-top:1px solid #ddd; }
-    #render-zone .editor-preview table { margin:2rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; border-collapse:separate; width:100%; }
+    #render-zone .editor-preview table { margin:2rem 0; border-spacing:0; border:1px solid lightgrey; border-left:none; border-top:none; border-collapse:collapse; width:100%; }
     #render-zone .editor-preview table th,
     #render-zone .editor-preview table td { border:1px solid lightgrey; padding:0.5rem 1rem; border-right:none; border-bottom:none; color:black; }
     #render-zone .editor-preview table th:empty,
@@ -195,7 +181,7 @@
     #render-zone .editor-preview li  { margin:0.25em 0; }
     #render-zone .editor-preview strong { font-weight:bold; }
     #render-zone .editor-preview em     { font-style:italic; }
-    #render-zone .editor-preview u      { text-decoration:underline; }
+    #render-zone .editor-preview u      { text-decoration: none; border-bottom: 1.5px solid currentColor; padding-bottom: 3px; }
   </style>
 </head>
 <body>
@@ -205,7 +191,6 @@
   <button class="tab-btn" onclick="switchTab('lot')">Impression en lot</button>
 </div>
 
-<!-- ═══ ONGLET UNITAIRE ═══ -->
 <div id="tab-unitaire" class="tab-pane active">
   <div class="card">
     <div class="hdr"><div class="hdr-t">Impression unitaire</div></div>
@@ -216,34 +201,34 @@
     </div>
 
     <div id="u-no-row" class="hint" style="margin-bottom:10px;">
-      Sélectionnez une ligne dans la table pour commencer.
+      Selectionnez une ligne dans la table pour commencer.
     </div>
 
     <div id="u-config" style="display:none">
-      <div class="sec">Ligne sélectionnée</div>
+      <div class="sec">Ligne selectionnee</div>
       <div class="hint" id="u-row-info" style="margin-bottom:10px;"></div>
 
-      <div class="sec">Modèle à appliquer</div>
+      <div class="sec">Modele a appliquer</div>
       <div class="field">
-        <label>Modèle de document</label>
-        <select id="uModelSelect"><option value="">— Choisir un modèle —</option></select>
+        <label>Modele de document</label>
+        <select id="uModelSelect"><option value="">Choisir un modele</option></select>
       </div>
 
       <hr>
 
       <div class="sec">Nom du fichier</div>
       <div class="field">
-        <label>Modèle de nom <span>(variables : {Nom_Colonne})</span></label>
+        <label>Modele de nom <span>(variables : {Nom_Colonne})</span></label>
         <input type="text" id="uNamePattern" value="{Nom_fichier}">
       </div>
 
       <button id="uLoadBtn" class="btn btn-primary btn-full" disabled>
-        Charger l'aperçu
+        Charger l'apercu
       </button>
     </div>
 
     <div id="u-preview-zone" style="display:none; margin-top:12px;">
-      <div class="sec">Aperçu (modifiable)</div>
+      <div class="sec">Apercu (modifiable)</div>
 
       <div id="preview-wrap">
         <div id="preview-toolbar">
@@ -261,8 +246,8 @@
       </div>
 
       <div class="btn-row">
-        <button id="uDownloadPdfBtn" class="btn btn-primary">Télécharger PDF</button>
-        <button id="uDownloadDocxBtn" class="btn btn-secondary">Télécharger Word</button>
+        <button id="uDownloadPdfBtn" class="btn btn-primary">Telecharger PDF</button>
+        <button id="uDownloadDocxBtn" class="btn btn-secondary">Telecharger Word</button>
       </div>
       <div class="btn-row">
         <button id="uBackBtn" class="btn btn-secondary btn-full">Retour</button>
@@ -272,14 +257,13 @@
     <div id="prog-area-u">
       <div class="pbar-wrap"><div class="pbar-fill" id="pbar-u"></div></div>
       <div class="pbar-info">
-        <span class="pbar-lbl" id="prog-lbl-u">Initialisation…</span>
+        <span class="pbar-lbl" id="prog-lbl-u">Initialisation...</span>
       </div>
     </div>
     <div id="result-u"></div>
   </div>
 </div>
 
-<!-- ═══ ONGLET LOT ═══ -->
 <div id="tab-lot" class="tab-pane">
   <div class="card">
     <div class="hdr"><div class="hdr-t">Impression en lot</div></div>
@@ -289,13 +273,13 @@
       <span id="col-txt">En attente du mapping de la colonne HTML</span>
     </div>
 
-    <div class="sec">Modèle à appliquer</div>
+    <div class="sec">Modele a appliquer</div>
     <div class="field">
-      <label>Modèle de document</label>
-      <select id="modelSelect"><option value="">— Chargement… —</option></select>
+      <label>Modele de document</label>
+      <select id="modelSelect"><option value="">Chargement...</option></select>
     </div>
     <div class="callout">
-      <span>Le modèle sera appliqué à toutes les lignes de la plage. Les valeurs précédentes seront <strong>restaurées</strong> après génération.</span>
+      <span>Le modele sera applique a toutes les lignes de la plage. Les valeurs precedentes seront restaurees apres generation.</span>
     </div>
 
     <hr>
@@ -303,21 +287,21 @@
     <div class="sec">Plage de lignes</div>
     <div class="row2">
       <div class="field">
-        <label>De la ligne N°</label>
+        <label>De la ligne N</label>
         <input type="number" id="startRow" value="1" min="1">
       </div>
       <div class="field">
-        <label>À la ligne N°</label>
+        <label>A la ligne N</label>
         <input type="number" id="endRow" value="10" min="1">
       </div>
     </div>
-    <div class="hint" id="row-hint">— chargement…</div>
+    <div class="hint" id="row-hint">chargement...</div>
 
     <hr>
 
     <div class="sec">Nom des fichiers</div>
     <div class="field">
-      <label>Modèle de nom <span>(variables : {Nom_Colonne})</span></label>
+      <label>Modele de nom <span>(variables : {Nom_Colonne})</span></label>
       <input type="text" id="namePattern" value="{Nom_fichier}">
     </div>
 
@@ -332,7 +316,7 @@
     <div id="prog-area-l">
       <div class="pbar-wrap"><div class="pbar-fill" id="pbar"></div></div>
       <div class="pbar-info">
-        <span class="pbar-lbl" id="prog-lbl">Initialisation…</span>
+        <span class="pbar-lbl" id="prog-lbl">Initialisation...</span>
         <span class="pbar-cnt" id="prog-cnt">0 / 0</span>
       </div>
     </div>
@@ -395,7 +379,7 @@
       : (records.length ? Object.keys(records[0]).filter(k => k !== 'id')[0] : null);
 
     updateStatus();
-    $('row-hint').textContent = `— ${mappedRecords.length} ligne(s) disponible(s)`;
+    $('row-hint').textContent = `${mappedRecords.length} ligne(s) disponible(s)`;
     if (!busy) $('endRow').value = mappedRecords.length || 10;
     if (!busy) await loadFullTable();
   });
@@ -417,7 +401,6 @@
       });
       await loadModeles();
     } catch (e) {
-      console.warn('fetchTable échoué:', e);
       allTableRows = mappedRecords;
     }
   }
@@ -427,9 +410,9 @@
       const raw = await grist.docApi.fetchTable('Modeles');
       const n   = raw.id.length;
       const buildOptions = sel => {
-        sel.innerHTML = '<option value="">— Choisir un modèle —</option>';
+        sel.innerHTML = '<option value="">Choisir un modele</option>';
         for (let i = 0; i < n; i++) {
-          const nom = raw['Nom_du_modele']?.[i] || raw['Nom']?.[i] || `Modèle ${raw.id[i]}`;
+          const nom = raw['Nom_du_modele']?.[i] || raw['Nom']?.[i] || `Modele ${raw.id[i]}`;
           const opt = document.createElement('option');
           opt.value = raw.id[i];
           opt.textContent = nom;
@@ -440,7 +423,7 @@
       buildOptions($('uModelSelect'));
     } catch (e) {
       ['modelSelect','uModelSelect'].forEach(id => {
-        $(id).innerHTML = '<option value="">— Table Modeles introuvable —</option>';
+        $(id).innerHTML = '<option value="">Table Modeles introuvable</option>';
       });
     }
   }
@@ -449,7 +432,7 @@
     const el = $('col-status');
     if (htmlColKey && mappedRecords.length > 0) {
       el.className = 'ready';
-      $('col-txt').textContent = `"${htmlColKey}" — ${mappedRecords.length} ligne(s)`;
+      $('col-txt').textContent = `Colonne Mappee : ${mappedRecords.length} ligne(s)`;
       $('genBtnPdf').disabled = false;
       $('genBtnDocx').disabled = false;
     } else {
@@ -464,7 +447,7 @@
     const el = $('col-status-u');
     if (htmlColKey) {
       el.className = 'ready';
-      $('col-txt-u').textContent = `Colonne "${htmlColKey}" mappée`;
+      $('col-txt-u').textContent = `Colonne Mappee`;
     } else {
       el.className = 'waiting';
       $('col-txt-u').textContent = 'En attente du mapping de la colonne HTML';
@@ -507,9 +490,9 @@
           return row && row['Modele'] === modeleId && row[htmlColKey]?.trim();
         });
         if (ok) { allTableRows = rows; return rows; }
-      } catch(e) { console.warn('poll error:', e); }
+      } catch(e) {}
     }
-    throw new Error("Timeout : Grist n'a pas recalculé les formules dans les 2 minutes.");
+    throw new Error("Timeout de calcul Grist.");
   }
 
   function resolveVar(row, key) {
@@ -524,6 +507,7 @@
     }
     return '';
   }
+  
   function buildName(row, patternInput, fallback) {
     const pat = $(patternInput).value.trim() || fallback;
     return pat
@@ -662,7 +646,7 @@
 
     await resolveImagesFixed(ep);
     await waitImages(ep, 4000);
-    await sleep(500); // délai pour charger la police Marianne
+    await sleep(300);
 
     const pages = paginateHtml(ep.innerHTML, ep);
     rz.style.height = PAGE_H + 'px'; rz.style.overflow = 'hidden';
@@ -680,38 +664,57 @@
     return pdf.output('blob');
   }
 
-  /* Conversion HTML -> DOCX via html-docx-js */
   async function htmlToDocxBlob(html) {
-    // Résoudre toutes les images en base64 pour que Word les embarque
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    await resolveImagesFixed(tmp);
-    await waitImages(tmp, 3000);
+    rz.style.width = '794px'; rz.style.height = 'auto'; rz.style.overflow = 'visible';
+    rz.innerHTML = `<div class="editor-preview">${html}</div>`;
+    const ep = rz.firstElementChild;
 
-    // Contraindre les dimensions des images pour éviter l'étirement
-    tmp.querySelectorAll('img').forEach(img => {
-      img.removeAttribute('width');
-      img.removeAttribute('height');
-      img.style.width = 'auto';
-      img.style.height = 'auto';
-      img.style.maxWidth = '14cm';
+    await resolveImagesFixed(ep);
+    await waitImages(ep, 4000);
+
+    const imgs = ep.querySelectorAll('img');
+    imgs.forEach(img => {
+      let specifiedWidth = img.getAttribute('width');
+      let specifiedHeight = img.getAttribute('height');
+      let nw, nh;
+
+      if (specifiedWidth) {
+        nw = parseInt(specifiedWidth);
+        nh = specifiedHeight ? parseInt(specifiedHeight) : (img.naturalHeight ? Math.round((img.naturalHeight / img.naturalWidth) * nw) : nw);
+      } else {
+        nw = img.naturalWidth || 120;
+        nh = img.naturalHeight || 120;
+        const maxW = 600;
+        if (nw > maxW) {
+          nh = Math.round((maxW / nw) * nh);
+          nw = maxW;
+        }
+      }
+      
+      img.setAttribute('width', nw);
+      img.setAttribute('height', nh);
+      img.style.width = nw + 'px';
+      img.style.height = nh + 'px';
+      img.style.maxWidth = 'none';
     });
 
-    const resolvedHtml = tmp.innerHTML;
-    const fullHtml = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><style>
-  body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.4; margin: 2cm 2cm 2cm 2cm; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-  table td, table th { border: 1px solid #ccc; padding: 0.4em 0.8em; vertical-align: top; }
-  img { max-width: 14cm; height: auto; display: block; }
-  p { margin: 0.3em 0; }
-  h1 { font-size: 16pt; } h2 { font-size: 14pt; } h3 { font-size: 12pt; }
-</style></head>
-<body>${resolvedHtml}</body></html>`;
-    return window.htmlDocx.asBlob(fullHtml, { orientation: 'portrait', margins: { top: 1134, right: 1134, bottom: 1134, left: 1134 } });
+    const cleanHtml = ep.innerHTML;
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+      <head><meta charset="utf-8"><style>
+        @font-face { font-family: 'Marianne'; src: url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; }
+        @font-face { font-family: 'Marianne'; src: url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; }
+        @font-face { font-family: 'Marianne'; src: url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Italic.woff2') format('woff2'); font-weight: 400; font-style: italic; }
+        body { font-family: 'Marianne', Arial, sans-serif; font-size: 14px; line-height: 1.4; text-align: justify; }
+        table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+        table td, table th { border: 1px solid #ccc; padding: 0.4em 0.8em; }
+        .page-break-marker { page-break-before: always; }
+      </style></head>
+      <body>${cleanHtml}</body></html>`;
+      
+    rz.innerHTML = '';
+    return window.htmlDocx.asBlob(fullHtml);
   }
 
   function setProgress(cur, tot, lbl) {
@@ -729,22 +732,19 @@
     const el = $('result-u'); el.className = cls; el.textContent = msg; el.style.display = 'block';
   }
 
-  /* ═══════════════════════════════════════════
-     ONGLET UNITAIRE
-  ═══════════════════════════════════════════ */
   let uOldModele = null;
   let uRowId = null;
 
   $('uLoadBtn').addEventListener('click', async () => {
     if (!currentRecord) return;
     const modeleId = parseInt($('uModelSelect').value);
-    if (!modeleId) return showResultU('warn', 'Veuillez choisir un modèle.');
+    if (!modeleId) return showResultU('warn', 'Choisir un modele.');
 
     busy = true;
     $('uLoadBtn').disabled = true;
     $('result-u').style.display = 'none';
     $('prog-area-u').className = 'on';
-    setProgressU('Application du modèle…');
+    setProgressU('Application du modele...');
 
     uRowId = currentRecord.id;
     const row = allTableRows.find(r => r.id === uRowId);
@@ -752,12 +752,12 @@
 
     try {
       await setModeleForRows([uRowId], modeleId);
-      setProgressU('Attente du recalcul Grist…');
+      setProgressU('Calcul Grist...');
       const fresh = await pollUntilReady([uRowId], modeleId);
       const updatedRow = fresh.find(r => r.id === uRowId);
       const html = updatedRow ? updatedRow[htmlColKey] : '';
 
-      if (!html?.trim()) throw new Error('HTML vide pour cette ligne.');
+      if (!html?.trim()) throw new Error('HTML vide.');
 
       const ec = $('edit-content');
       ec.innerHTML = html;
@@ -794,14 +794,14 @@
   $('uDownloadPdfBtn').addEventListener('click', async () => {
     $('uDownloadPdfBtn').disabled = true;
     $('prog-area-u').className = 'on';
-    setProgressU('Génération du PDF…');
+    setProgressU('Generation du PDF...');
     try {
       const html = $('edit-content').innerHTML;
       const blob = await htmlToPdfBlob(html);
       const row = allTableRows.find(r => r.id === uRowId) || {};
       const name = buildName(row, 'uNamePattern', 'Document');
       saveAs(blob, name + '.pdf');
-      showResultU('ok', 'PDF téléchargé.');
+      showResultU('ok', 'PDF telecharge.');
     } catch(err) {
       showResultU('err', 'Erreur : ' + err.message);
     }
@@ -812,14 +812,14 @@
   $('uDownloadDocxBtn').addEventListener('click', async () => {
     $('uDownloadDocxBtn').disabled = true;
     $('prog-area-u').className = 'on';
-    setProgressU('Génération du document Word…');
+    setProgressU('Generation Word...');
     try {
       const html = $('edit-content').innerHTML;
       const blob = await htmlToDocxBlob(html);
       const row = allTableRows.find(r => r.id === uRowId) || {};
       const name = buildName(row, 'uNamePattern', 'Document');
       saveAs(blob, name + '.docx');
-      showResultU('ok', 'Document Word téléchargé.');
+      showResultU('ok', 'Word telecharge.');
     } catch(err) {
       showResultU('err', 'Erreur : ' + err.message);
     }
@@ -827,13 +827,10 @@
     $('uDownloadDocxBtn').disabled = false;
   });
 
-  /* ═══════════════════════════════════════════
-     ONGLET LOT
-  ═══════════════════════════════════════════ */
   $('cancelBtn').addEventListener('click', () => {
     if (!busy) return;
     cancelled = true;
-    $('prog-lbl').textContent = 'Annulation…';
+    $('prog-lbl').textContent = 'Annulation...';
   });
 
   async function runBatch(format) {
@@ -841,15 +838,15 @@
     $('result-l').style.display = 'none';
 
     const modeleId = parseInt($('modelSelect').value);
-    if (!modeleId) return showResult('warn', 'Veuillez choisir un modèle.');
+    if (!modeleId) return showResult('warn', 'Veuillez choisir un modele.');
 
     const start = parseInt($('startRow').value);
     const end   = parseInt($('endRow').value);
     if (isNaN(start) || isNaN(end) || start < 1 || end < start) return showResult('err', 'Plage invalide.');
 
     const slice = mappedRecords.slice(start - 1, end);
-    if (!slice.length) return showResult('warn', 'Aucun enregistrement dans cette plage.');
-    if (!htmlColKey)   return showResult('err', 'Aucune colonne HTML mappée.');
+    if (!slice.length) return showResult('warn', 'Aucun enregistrement.');
+    if (!htmlColKey)   return showResult('err', 'Aucune colonne HTML mappee.');
 
     busy = true; cancelled = false;
     $('genBtnPdf').disabled = true; $('genBtnDocx').disabled = true;
@@ -861,20 +858,20 @@
     const oldModeles = rowIds.map(id => { const row = allTableRows.find(r => r.id === id); return row ? row['Modele'] : null; });
 
     try {
-      setProgress(0, slice.length, 'Application du modèle…');
+      setProgress(0, slice.length, 'Application du modele...');
       await setModeleForRows(rowIds, modeleId);
 
-      setProgress(0, slice.length, 'Attente du recalcul Grist…');
+      setProgress(0, slice.length, 'Attente Grist...');
       const freshRows = await pollUntilReady(rowIds, modeleId);
 
       const zip = new JSZip(); const used = new Set(); let ok = 0, skip = 0;
 
       for (let i = 0; i < slice.length; i++) {
-        if (cancelled) { showResult('warn', `Annulé après ${ok} fichiers générés.`); break; }
+        if (cancelled) { showResult('warn', `Annule apres ${ok} fichiers.`); break; }
         const mapped = slice[i];
         const updatedRow = freshRows.find(r => r.id === mapped.id) || mapped;
         const html = updatedRow[htmlColKey];
-        if (!html?.trim()) { skip++; setProgress(i+1, slice.length, `Ligne ignorée (HTML vide)`); continue; }
+        if (!html?.trim()) { skip++; setProgress(i+1, slice.length, `Ligne ignoree (HTML vide)`); continue; }
 
         const fullRow = allTableRows.find(r => r.id === mapped.id) || mapped;
         let name = buildName(fullRow, 'namePattern', `Document_${i+1}`);
@@ -882,16 +879,16 @@
         if (used.has(file)) file = `${name}_id${mapped.id}${ext}`;
         used.add(file);
 
-        setProgress(i, slice.length, `Création : ${file}`);
+        setProgress(i, slice.length, `Creation : ${file}`);
         try {
           const blob = format === 'pdf' ? await htmlToPdfBlob(html) : await htmlToDocxBlob(html);
           if (blob && blob.size > 200) { zip.file(file, blob); ok++; }
           else skip++;
         } catch(e) { skip++; }
-        setProgress(i+1, slice.length, `${ok} fichiers créés…`);
+        setProgress(i+1, slice.length, `${ok} fichiers crees...`);
       }
 
-      setProgress(slice.length, slice.length, 'Restauration des données…');
+      setProgress(slice.length, slice.length, 'Restauration...');
       await grist.docApi.applyUserActions(rowIds.map((id, i) => ['UpdateRecord', tableId, id, { Modele: oldModeles[i] ?? 0 }]));
 
       if (ok > 0) {
@@ -899,10 +896,10 @@
         const d = new Date();
         const prefix = format === 'pdf' ? 'Export_PDF' : 'Export_Word';
         saveAs(zb, `${prefix}_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.zip`);
-        setProgress(slice.length, slice.length, 'ZIP téléchargé');
-        showResult('ok', `${ok} fichiers générés${skip ? ` (${skip} ignorée(s))` : ''}`);
+        setProgress(slice.length, slice.length, 'ZIP telecharge');
+        showResult('ok', `${ok} fichiers generes${skip ? ` (${skip} ignoree(s))` : ''}`);
       } else if (!cancelled) {
-        showResult('err', 'Aucun fichier valide généré.');
+        showResult('err', 'Aucun fichier valide genere.');
       }
     } catch(err) {
       showResult('err', `Erreur : ${err.message}`);
